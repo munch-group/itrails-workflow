@@ -89,6 +89,10 @@ jobs:
       #     pip install pytest
       #     pytest test
 
+      - name: Install conda-build into base
+        shell: bash -l {0}
+        run: |
+          conda install -n base -c conda-forge -y conda-build conda-verify anaconda-client nodejs=24
 
       - name: Build and upload the conda packages
         uses: munch-group/action-conda-build-upload@v0.1.26
