@@ -1,0 +1,140 @@
+# Input data
+
+An analysis starts either from a ready-made alignment (`maf`) or from phased variant
+calls (`vcf`). Exactly one of the two must be given; everything downstream is
+identical.
+
+## MAF alignments
+
+iTRAILS reads a [MAF](https://genome.ucsc.edu/FAQ/FAQformat.html#format5) file
+holding the four aligned genomes in the order A, B, C, outgroup.
+
+```txt
+##maf version=1 scoring=none
+
+a score=0
+s hg38.chr1     0 50000 + 1000000 ACGT…
+s panTro5.chr1  0 50000 + 1000000 ACGT…
+s gorGor5.chr1  0 50000 + 1000000 ACGT…
+s ponAbe2.chr1  0 50000 + 1000000 ACGT…
+```
+
+Two properties matter for the pipeline:
+
+**Species names.** iTRAILS takes the species as the part of the sequence name before
+the first dot, and matches it against the `species_list` in the configuration file.
+A block is used only if all four species are present in it.
+
+**Blocks are independent.** Each alignment block is treated as a separate sequence by
+the HMM, with no transition across block boundaries. This is what makes windowing
+lossless: splitting a MAF at block boundaries cannot change the result. It also means
+the block size you choose is a modelling decision — blocks should be long compared to
+the scale of linkage, and the shipped data uses 50 kb blocks.
+
+Gaps (`-`) are read as `N`, and `N` columns contribute no information rather than
+being treated as a mismatch.
+
+## Phased VCFs
+
+For closely related species that were all mapped and variant-called against the same
+reference genome — baboon species against the macaque genome, for instance — the
+shared coordinate system already aligns the genomes. In that situation the workflow
+can build the alignment itself: give `vcf` and `samples` instead of `maf`, and an
+`alignment/` step reconstructs one haplotype per sample.
+
+```yaml
+analyses:
+  - name: baboons
+    vcf: [data/papio.g.vcf.gz, data/theropithecus.g.vcf.gz]
+    fasta: data/rheMac10.fa
+    samples: [pAnubis1, pHamadryas1, pCynocephalus1, REF]
+    config: config/baboons_config.yaml
+    window_size: 2000000
+```
+
+`samples` lists exactly four sample IDs in species order A, B, C, outgroup. The
+**first haplotype** of each is used, which for phased data means the allele before the
+`|` separator; `haplotype: 2` selects the other one. Sample IDs double as the species
+names in the generated alignment, so they are what belongs in the `species_list` of
+the configuration file, and they must not contain a dot.
+
+::: { .callout-tip }
+
+## The `REF` sample
+
+The reserved name `REF` stands for the reference sequence itself rather than a sample
+in the VCF. It exists for exactly the baboon case: the genome everything was mapped
+to *is* the outgroup, and it has no genotype column of its own.
+
+:::
+
+### With or without a reference FASTA
+
+The `fasta` key is optional, and which of the two modes fits depends on what your
+files contain.
+
+**With `fasta`** — the reference provides the base at every position and variant
+alleles are written on top of it. This is the mode for ordinary variant-only VCFs and
+for banded gVCFs, whose non-variant blocks record only a span and a genotype rather
+than the sequence itself.
+
+**Without `fasta`** — sequences are reconstructed from the records alone. This is
+meant for all-sites *genome* VCFs, where every callable position has a record
+carrying its `REF` base. Positions without a record become `N`, and the `REF`
+pseudo-sample is assembled from the `REF` fields of the records. Contig names,
+lengths and order are then taken from the `##contig` header lines, which must carry
+`length=`.
+
+::: { .callout-warning }
+
+Banded gVCF blocks (`END=` records) only store the base at the anchor position — the
+rest of the block is not in the file. Converting such a file *without* a `fasta`
+therefore yields `N` for the block interiors, which is almost never what you want.
+The converter counts those positions and warns. Supply `fasta` for banded gVCFs.
+
+:::
+
+### How calls become sequence
+
+| Record for the sample | Written to the haplotype |
+|:---|:---|
+| SNP or equal-length substitution | the chosen allele |
+| insertion, deletion, or other length change | `N` over the reference span |
+| symbolic allele (`<NON_REF>`, `<*>`, `*`) | `N` over the reference span |
+| missing genotype (`.`) | `N` over the reference span |
+| non-variant block (`END=`) with allele `0` | reference bases (with `fasta`) |
+| no record at all | `N`, unless `mask_uncovered: false` |
+
+Anything whose length differs from `REF` cannot be represented in reference
+coordinates without shifting every downstream position, so it is masked rather than
+approximated. `mask_uncovered: false` switches to the plain-VCF reading where absence
+of a record means "identical to the reference"; it requires `fasta`, since without
+the reference there is nothing to fill those positions with. `FILTER` is ignored
+entirely — filter the VCF beforehand if you need that.
+
+Unphased heterozygous genotypes (`0/1`) are not an error: the first listed allele is
+used, and the converter reports how many it saw so you can judge whether the input
+was as phased as you thought.
+
+### Multiple files
+
+Samples may be spread over several VCFs, one per sample or one per region, and each
+file contributes whichever requested samples appear in its header. Files must be
+coordinate-sorted with contigs in the same order as the FASTA (or, without a FASTA,
+as the first file's header). Where two files carry the same sample, the later file
+wins.
+
+Use `regions: [chr1, chr2]` to restrict an analysis to selected contigs; the default
+is every contig in the FASTA or in the VCF headers.
+
+### Converting outside the workflow
+
+The conversion is a plain script and can be run by hand, which is useful for checking
+a small region before committing to a full run:
+
+```{.bash filename="Terminal"}
+pixi run python scripts/vcf_to_maf.py data/papio.g.vcf.gz \
+    --fasta data/rheMac10.fa \
+    --samples pAnubis1 pHamadryas1 pCynocephalus1 REF \
+    --output test.maf --regions chr20 --block-size 1000000
+```

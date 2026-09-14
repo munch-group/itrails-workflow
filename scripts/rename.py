@@ -43,8 +43,8 @@ def find_and_replace_in_file(file_path: Path, old_hyphen: str, new_hyphen: str,
 
 def rename_library(new_name: str):
     """Rename the library from slurm-code to the new name."""
-    old_hyphen = "munch-group-library"
-    old_underscore = "munch_group_library"
+    old_hyphen = "munch-group-project"
+    old_underscore = "munch_group_project"
 
     new_hyphen = new_name
     new_underscore = convert_to_underscore(new_name)

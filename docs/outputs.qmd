@@ -1,0 +1,171 @@
+# Output files
+
+Every analysis writes to `{output_dir}/{name}/` with one subfolder per step, so it is
+always clear which step produced a file:
+
+```txt
+steps/itrails/example/
+├── alignment/   example.maf                    (VCF input only)
+├── split/       w0000.maf, w0001.maf,
+│                windows.tsv, blocks.tsv        (windowed only)
+├── optimize/    example.best_model.yaml
+│                example.optimization_history.csv
+│                example.starting_params.yaml
+├── viterbi/     w0000.viterbi.csv, w0000.hidden_states.csv, …
+├── posterior/   w0000.posterior.csv, w0000.hidden_states.csv, …
+└── concat/      example.viterbi.csv, example.posterior.csv   (windowed only)
+```
+
+Without windowing there is no `split/` or `concat/`, and the decode files are named
+after the analysis (`viterbi/example.viterbi.csv`) rather than after a window.
+
+::: { .callout-note }
+
+Both decode steps write a file called `hidden_states.csv`, and iTRAILS silently
+renames the second one it encounters rather than overwriting. Giving each step its
+own folder is what keeps them apart, so both files are always the legend for the
+decode they sit next to.
+
+:::
+
+## optimize/
+
+`{name}.best_model.yaml` is the fitted model, and the input to both decode steps:
+
+```yaml
+fixed_parameters:
+  mu: 2.0e-08
+optimized_parameters:
+  N_AB: 51249.99
+  N_ABC: 51249.99
+  r: 1.0249e-08
+  t_1: 246000.0
+  t_2: 41000.0
+  t_upper: 670562.44
+results:
+  iteration: 8
+  log_likelihood: -813757.29
+settings:
+  …
+```
+
+::: { .callout-warning }
+
+This file is written at iteration zero, with a log-likelihood of `-inf`, and updated
+whenever the optimizer improves on the best fit so far. Its existence therefore does
+**not** mean the optimization finished — check the target status, and read
+`results: iteration` to see how far it got.
+
+:::
+
+`{name}.optimization_history.csv` records the parameter values, log-likelihood and
+elapsed time of every iteration, which is the file to plot when judging whether an
+optimization had converged. `{name}.starting_params.yaml` records the starting values
+and bounds the run began from.
+
+## viterbi/
+
+`{window}.viterbi.csv` segments the alignment into runs of constant most-likely
+state:
+
+| Column | Meaning |
+|:---|:---|
+| `Block_idx` | index of the alignment block *within this window's file* |
+| `position_start`, `position_end` | segment bounds within the block, 0-based |
+| `most_likely_state` | hidden state index |
+
+## posterior/
+
+`{window}.posterior.csv` gives one row per alignment position:
+
+| Column | Meaning |
+|:---|:---|
+| `alignment_block_idx` | index of the alignment block within this window's file |
+| `position_idx` | position within the block, 0-based |
+| `prob_state_0` … `prob_state_N` | posterior probability of each hidden state |
+
+With `n_int_AB: 3` and `n_int_ABC: 3` there are 27 state columns. The file has a row
+for every base, so it is one to two orders of magnitude larger than the alignment.
+
+## The hidden-state legend
+
+`{window}.hidden_states.csv` translates state indices into biology:
+
+| Column | Meaning |
+|:---|:---|
+| `state_idx` | the index used in the decode files |
+| `topology` | gene-tree topology, e.g. `({sp1,sp2},sp3)` |
+| `interval_1st_coalescent` | time interval of the first coalescence, in generations |
+| `interval_2nd_coalescent` | time interval of the second coalescence |
+| `shorthand_name` | compact label such as `(0, 0, 1)` |
+
+The topology distinguishes the species-tree arrangement from the two incomplete
+lineage sorting alternatives, and the intervals say when in the ancestral populations
+the two coalescences fell.
+
+## split/ and the manifests
+
+`split/` holds one MAF per window plus two manifests that record how the alignment was
+divided. `windows.tsv`:
+
+| Column | Meaning |
+|:---|:---|
+| `window` | window label, `w0000`, `w0001`, … |
+| `chrom` | binning-reference sequence name, e.g. `hg38.chr1` |
+| `start`, `end` | nominal window bounds in reference coordinates |
+| `n_blocks` | number of alignment blocks in the window |
+
+`blocks.tsv` maps every block back to the original alignment:
+
+| Column | Meaning |
+|:---|:---|
+| `window` | window the block was assigned to |
+| `local_idx` | index of the block within the window — the `Block_idx` iTRAILS reports |
+| `src_block` | index of the block in the original, unsplit alignment |
+| `chrom`, `start`, `length` | position of the block in reference coordinates |
+
+## concat/
+
+The concatenated files stack the per-window decodes back together in window order and
+prefix each row with four columns that restore genome context:
+
+| Column | Meaning |
+|:---|:---|
+| `window` | which window the row came from |
+| `chrom` | binning-reference sequence name |
+| `block_start` | reference start coordinate of the block |
+| `src_block` | index of the block in the original alignment |
+
+The original columns follow unchanged, so a genome coordinate is `block_start` plus
+the block-local position:
+
+```txt
+window,chrom,block_start,src_block,Block_idx,position_start,position_end,most_likely_state
+w0000,hg38.chr1,0,0,0,0,9843,8.0
+w0000,hg38.chr1,0,0,0,9844,16109,17.0
+w0001,hg38.chr1,950000,19,9,0,41049,2.0
+```
+
+## Reading the results
+
+```python
+import pandas as pd
+
+analysis = 'steps/itrails/example'
+
+vit = pd.read_csv(f'{analysis}/concat/example.viterbi.csv')
+states = pd.read_csv(f'{analysis}/viterbi/w0000.hidden_states.csv')
+
+# genome coordinates and a readable state label
+vit['genome_start'] = vit['block_start'] + vit['position_start']
+vit['genome_end'] = vit['block_start'] + vit['position_end']
+vit['state'] = vit['most_likely_state'].map(
+    states.set_index('state_idx')['shorthand_name'])
+
+# how much sequence is assigned to each state
+vit['length'] = vit['genome_end'] - vit['genome_start'] + 1
+vit.groupby('state')['length'].sum().sort_values(ascending=False)
+```
+
+`notebooks/example.ipynb`, which the workflow executes as its last step, does exactly
+this and plots the results; it is included in these pages under **Notebooks**.

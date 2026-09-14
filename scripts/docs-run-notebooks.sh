@@ -3,34 +3,18 @@
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-cd docs
-DIR=pages
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m' # No Color
+DIR=./notebooks
 
 if test -d $DIR; then
-  for FILE in $(find $DIR -name '*.ipynb' | sort) ; do
-    if [[  "$(grep $FILE _quarto.yml | grep -v '#')" ]]; then
-      echo -e "${BLUE}Rendering ${FILE}${NC}"
-      # CMD="jupyter nbconvert --Application.log_level=50 --to notebook --execute --inplace $FILE"
-      CMD="jupyter nbconvert --log-level=WARN --to notebook --execute --inplace \
-        --TagRemovePreprocessor.enabled=True \
-        --TagRemovePreprocessor.remove_cell_tags='{"skip-execution"}' $FILE"
-      echo $CMD
-    #  NOTEBOOK_THEME=light PYDEVD_DISABLE_FILE_VALIDATION=1 $CMD || exit 1 ;
-     NOTEBOOK_THEME=light PYDEVD_DISABLE_FILE_VALIDATION=1 $CMD > /dev/null 2>&1 && {
-      echo -e "${GREEN}Successfully executed ${FILE}${NC}"
-     } || {
-        echo -e "${RED}Error executing ${FILE}${NC}"
-        errors=true
-      }
-      echo
-    fi
+  for FILE in $(find $DIR -name '*.ipynb') ; do
+    echo -e "${BLUE}Rendering ${FILE}${NC}"
+    # CMD="jupyter nbconvert --Application.log_level=50 --to notebook --execute --inplace $FILE"
+    CMD="jupyter nbconvert --log-level=WARN --to notebook --execute --inplace $FILE"
+    echo $CMD
+    NOTEBOOK_THEME=light PYDEVD_DISABLE_FILE_VALIDATION=1 $CMD || exit 1 ;
   done
 else
-  echo "directory $DIR does not exist"
+  echo "docs/pages directory does not exist"
   exit 1
 fi
 
@@ -38,8 +22,3 @@ for FILE in $(find $DIR -type f -size +50M); do
   echo "$FILE too large. Clearing outputs."
   jupyter nbconvert --clear-output --inplace $FILE
 done
-
-# if [ "$errors" = true ] ; then
-#   echo "One or more notebooks failed to execute"
-#   exit 1
-# fi

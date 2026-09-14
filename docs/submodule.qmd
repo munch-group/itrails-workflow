@@ -1,0 +1,183 @@
+# Use as a submodule
+
+The repository is written so that it works two ways: on its own, driven by
+`analyses.yml`, and as a component of a larger GWF project that adds this repository
+as a Git submodule and grafts the iTRAILS targets onto its own workflow. The second
+is the reason the pipeline is factored the way it is.
+
+Submodules are useful when an analysis component is shared across projects, or when
+several pipelines need to be combined into one dependency graph. Each component keeps
+its own repository, environment and workflow, and the parent decides how they connect;
+the GWF documentation describes the underlying patterns for
+[dynamically generated workflows](https://gwf.app/guide/patterns/#dynamically-generating-a-workflow)
+and [large workflows](https://gwf.app/guide/patterns/#large-workflows).
+
+## Add the component
+
+From the root of the parent project:
+
+```{.bash filename="Terminal"}
+git submodule add git@github.com:munch-group/itrails.git itrails
+git submodule init itrails
+git submodule update itrails
+git add .gitmodules itrails
+git commit -m 'Added itrails as submodule'
+```
+
+Then check out a branch inside the submodule. A fresh submodule is in detached HEAD
+state, and work committed there is easy to lose:
+
+```{.bash filename="Terminal"}
+cd itrails
+git checkout main
+```
+
+::: { .callout-important }
+
+Install a current Git in your environment — the one on the cluster is ancient — and
+set these once, since the commands below assume them:
+
+```{.bash filename="Terminal"}
+git config --global diff.submodule log
+git config status.submodulesummary 1
+git config push.recurseSubmodules check
+```
+
+:::
+
+## Call the factory
+
+The parent imports `itrails_workflow` and hands it its own `Workflow` object:
+
+```python
+import os, sys
+from gwf import Workflow
+
+gwf = Workflow(defaults={'account': 'my-project'})
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'itrails'))
+from itrails_workflow import itrails_workflow
+
+gwf, itrails_targets = itrails_workflow(
+    gwf=gwf,
+    analyses=[
+        dict(name='primates',
+             maf='data/alignment.maf',
+             config='config/itrails_config.yaml',
+             window_size=2_000_000),
+    ],
+    output_dir='steps/itrails',
+)
+```
+
+::: { .callout-note }
+
+## Why the odd import
+
+The factory lives in `itrails_workflow.py` rather than `workflow.py`, and is imported
+by inserting the submodule directory on `sys.path`. Both choices avoid name
+collisions: the parent has its own `workflow.py`, and the *installed Python package*
+is also called `itrails`, so importing this repository as a package would shadow the
+tool it wraps.
+
+:::
+
+Paths in the analysis dictionaries are resolved relative to where `gwf run` is
+invoked — the parent project root — not relative to the submodule.
+
+## Arguments
+
+| Argument | Meaning |
+|:---|:---|
+| `gwf` | the parent's `Workflow`; a new one is created if omitted |
+| `analyses` | list of analysis dictionaries, the same keys as in `analyses.yml` |
+| `output_dir` | root for all output, default `steps/itrails` |
+| `account` | Slurm account added to every target |
+| `window_size`, `fit` | defaults for all analyses, overridable per analysis |
+| `run_prefix` | command prefix that puts the iTRAILS executables on `PATH` |
+| `*_options` | per-step resource dictionaries applied to every analysis |
+
+`run_prefix` defaults to running each command inside the submodule's own pixi
+environment, resolved from the module's own location so that it works no matter which
+directory the parent is run from. A parent that already provides iTRAILS can pass its
+own activation prefix, or `run_prefix=''` to use whatever is on `PATH`.
+
+## Wiring up downstream targets
+
+The factory returns `(gwf, targets)`, where `targets` maps step names to the created
+targets, so the parent can depend on iTRAILS output by name instead of by hard-coded
+path:
+
+```python
+viterbi_csv = itrails_targets['concat_viterbi'][0].outputs['csv']
+best_model = itrails_targets['optimize'][0].outputs['best_model']
+
+gwf.target('summarize',
+           inputs=[viterbi_csv],
+           outputs=['steps/summary/ils_fractions.tsv']) << f"""
+python scripts/summarize_ils.py {viterbi_csv} steps/summary/ils_fractions.tsv
+"""
+```
+
+The keys are `optimize`, `viterbi` and `posterior`; `vcf2maf` when the analysis
+starts from VCFs; and `split`, `concat_viterbi` and `concat_posterior` for windowed
+analyses. Each target's `outputs` dictionary is documented in
+[Output files](outputs.qmd) — `best_model`, `viterbi`, `posterior`, `hidden_states`,
+`maf`, `windows`, `manifest`, `blocks` and `csv`.
+
+Feeding a parent-generated alignment *into* the component works the same way, with
+one caveat: a windowed analysis reading a `maf` needs that file to exist when the
+workflow is defined, so run the target that produces it first. VCF analyses have no
+such constraint — see [Windowed analyses](windowing.qmd).
+
+## Several components in one workflow
+
+Components combine by passing the same `gwf` object to each factory, which is how
+this repository is meant to sit alongside sibling components such as `rfmix`:
+
+```python
+import os, sys
+from gwf import Workflow
+
+def target_output_files(targets, key):
+    return [out for target in targets[key] for out in target.outputs]
+
+gwf = Workflow(defaults={'account': 'my-project'})
+
+for component in ['itrails', 'rfmix']:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), component))
+
+from itrails_workflow import itrails_workflow
+from workflow import rfmix_workflow
+
+gwf, itrails_targets = itrails_workflow(gwf=gwf, analyses=[...],
+                                        output_dir='steps/itrails')
+gwf, rfmix_targets = rfmix_workflow(gwf, analyzes=[...],
+                                    output_dir='steps/rfmix')
+```
+
+Since every target ends up in one graph, GWF works out the dependencies across
+components from the files they declare, and `gwf status` shows the whole pipeline.
+
+## Keeping the submodule current
+
+Pulling in the parent updates the *recorded state* of the submodule but does not
+update the submodule contents; that is a separate step:
+
+```{.bash filename="Terminal"}
+git pull                                  # parent, including the recorded commit
+git submodule update --remote --merge     # fetch and merge submodule changes
+```
+
+`--checkout` (the default) puts the submodule on a detached HEAD at the recorded
+commit, `--merge` merges into the current branch, and `--rebase` rebases onto it.
+Changes made inside the submodule are published from within it:
+
+```{.bash filename="Terminal"}
+cd itrails
+git add -u && git commit -m 'Adjusted resources'
+git push
+```
+
+Then commit the new submodule state in the parent, which is what records the version
+of the component the project used.

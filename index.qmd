@@ -1,0 +1,77 @@
+# Preface { .unnumbered }
+
+These pages document the **iTRAILS workflow component**: a [GWF](https://gwf.app/)
+pipeline that fits the TRAILS coalescent hidden Markov model
+([Rivas-González et al., 2024](https://doi.org/10.1371/journal.pgen.1010836)) to a
+four-genome alignment and decodes gene-tree topologies along the genome.
+
+The pipeline runs on its own, and it is written so that a larger project can consume
+it as a Git submodule. The pages are generated from the
+[munch-group/itrails](https://github.com/munch-group/itrails) repository and published
+with GitHub Pages; see [The documentation website](docs/website.qmd) for how that
+works.
+
+## What the pipeline does
+
+Given three ingroup species **A**, **B**, **C** with topology ((A,B),C) and an
+outgroup, iTRAILS estimates ancestral population sizes and speciation times from the
+pattern of incomplete lineage sorting along the genome, and then labels each position
+with a hidden state — a gene-tree topology combined with discretized coalescence
+times.
+
+The component wraps that in a GWF workflow that also prepares the input and splits
+the work into genomic windows:
+
+```{mermaid}
+flowchart TD
+    VCF["phased (g)VCFs<br/>+ optional reference FASTA"] --> ALIGN["<b>alignment/</b><br/>itrails_vcf2maf"]
+    MAF["MAF alignment"] --> OPT
+    ALIGN --> OPT["<b>optimize/</b><br/>itrails-optimize<br/>→ best_model.yaml"]
+    ALIGN --> SPLIT
+    MAF --> SPLIT["<b>split/</b><br/>windows of N bases"]
+    SPLIT --> VIT["<b>viterbi/</b><br/>most likely state path"]
+    SPLIT --> POST["<b>posterior/</b><br/>state probabilities"]
+    OPT --> VIT
+    OPT --> POST
+    VIT --> CAT["<b>concat/</b><br/>genome-wide CSVs"]
+    POST --> CAT
+```
+
+Each step writes to its own subfolder of the analysis directory, so outputs stay easy
+to tell apart. Windowing and the VCF front end are both optional: the smallest
+possible analysis is a MAF file plus a configuration file, which gives one model fit
+and one decode of each kind.
+
+## Where to start
+
+| If you want to … | Read |
+|:---|:---|
+| run the shipped example and see output | [Getting started](docs/getting-started.qmd) |
+| use your own alignment or variant calls | [Input data](docs/input.qmd) |
+| know what every setting does | [Configuration](docs/configuration.qmd) |
+| analyze a whole genome in parallel | [Windowed analyses](docs/windowing.qmd) |
+| find and read the result files | [Output files](docs/outputs.qmd) |
+| plug the pipeline into a larger project | [Use as a submodule](docs/submodule.qmd) |
+
+## Repository layout
+
+```txt
+analyses.yml            what to analyze (standalone runs)
+config/                 iTRAILS model configuration files
+workflow.py             standalone GWF entry point
+itrails_workflow.py     the workflow factory a parent project imports
+scripts/                vcf_to_maf.py, split_maf.py, concat_windows.py, simulate_data.py
+data/                   input alignments (a small simulated one is included)
+notebooks/              result notebooks, executed by the workflow
+steps/                  workflow output (not tracked by Git)
+docs/                   these pages
+```
+
+::: { .callout-note }
+
+Two reference documents in the repository root — `claude-itrails-ref.md` and
+`claude-gwf-ref.md` — collect the iTRAILS command-line interface, file formats and
+model parameters, and the GWF API. They are written as working references for
+maintaining the pipeline and go deeper than these pages on both tools.
+
+:::

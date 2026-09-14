@@ -1,0 +1,66 @@
+# Large files
+
+Data files that are worth keeping with the repository but are too large for ordinary
+Git — the shipped simulated alignment is 4 MB, a real alignment is hundreds — are
+handled with [Git Large File Storage](https://git-lfs.com). Git LFS stores a small
+pointer in the repository and the content on a separate server, so clones stay small.
+
+## Install
+
+```{.bash filename="Terminal"}
+conda install -c conda-forge git git-lfs
+git lfs install
+```
+
+`git-lfs` is part of the default pixi environment of this repository, so
+`pixi run git lfs …` works without a separate installation.
+
+## Configure
+
+Track a file pattern, then commit the resulting `.gitattributes`:
+
+```{.bash filename="Terminal"}
+git lfs track "*.h5"
+git add .gitattributes
+git commit -m 'Added LFS'
+git push
+```
+
+From then on every `.h5` file added to the repository goes to LFS instead of into the
+Git object store. Patterns worth tracking in a pipeline repository are the ones that
+grow without bound — `*.h5`, `*.maf`, `*.vcf.gz` — rather than everything under
+`data/`.
+
+::: { .callout-note }
+
+Tracking applies to files added *after* the pattern is registered. Files already
+committed stay in Git history, and moving them into LFS retroactively means rewriting
+history.
+
+:::
+
+## Managing files
+
+::: { .callout-warning }
+
+Managing the LFS storage of a shared repository — quotas, purging old objects,
+archives — is for the repository owner. See the GitHub documentation on
+[configuring Git LFS](https://docs.github.com/en/repositories/working-with-files/managing-large-files/configuring-git-large-file-storage)
+and on
+[LFS objects in archives](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/managing-repository-settings/managing-git-lfs-objects-in-archives-of-your-repository).
+
+:::
+
+## What this repository does instead
+
+Nothing here is currently in LFS. Two mechanisms keep the repository small without
+it:
+
+- The example alignment is *generated*, not stored at full size:
+  `pixi run simulate-example` reproduces `data/simulated_alignment.maf` from a seeded
+  msprime simulation.
+- The published great-ape alignment is downloaded on demand with
+  `pixi run download-example` and is listed in `.gitignore`.
+
+Workflow output under `steps/` is ignored as well, since it is reproducible from the
+input and the configuration.

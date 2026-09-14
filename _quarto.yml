@@ -1,0 +1,62 @@
+project:
+  type: book
+
+execute:
+  freeze: auto
+  echo: true
+      
+format:
+  html:
+    theme: 
+      - default
+      - custom.scss
+    toc-depth: 2
+    notebook-links: true
+    number-sections: false  
+    reference-location: margin
+    mermaid:
+      theme: neutral
+
+comments:
+  hypothesis: true
+
+lightbox: true
+
+book:
+  repo-url: "https://github.com/munch-group/itrails"
+  repo-actions: [edit, issue, source]
+  title: "iTRAILS workflow component"
+  author: "Kasper Munch"
+  sidebar:
+    collapse-level: 1
+    search: true  
+  chapters:
+    - index.qmd
+    - part: "User guide"
+      chapters:
+      - docs/getting-started.qmd
+      - docs/input.qmd
+      - docs/configuration.qmd
+      - docs/windowing.qmd
+      - docs/outputs.qmd
+    - part: "Integration"
+      chapters:
+      - docs/submodule.qmd
+    - part: "Repository"
+      chapters:
+      - docs/website.qmd
+    - part: "Notebooks"
+      chapters:
+      - notebooks/example.ipynb
+    - part: "Workflows"
+      chapters:
+      - workflow.py
+    # - part: "Reports"
+    #   chapters: 
+    #   - reports/example.qmd
+    # - part: "Tables"
+    #   chapters:
+    #   - tables/example.ipynb
+
+bibliography: references.bib
+

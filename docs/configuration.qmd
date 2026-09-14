@@ -1,0 +1,169 @@
+# Configuration
+
+Two files control a standalone run: `analyses.yml` says *what* to analyze, and an
+iTRAILS configuration file says *how* to fit the model. When the repository is used
+as a submodule the parent workflow passes the same information as arguments and
+`analyses.yml` is unused — see [Use as a submodule](submodule.qmd).
+
+## analyses.yml
+
+```yaml
+# Slurm account for all targets (leave empty when running locally)
+account:
+
+# each analysis writes to {output_dir}/{name}/, one subfolder per step
+output_dir: steps/itrails
+
+analyses:
+  - name: example
+    maf: data/simulated_alignment.maf
+    config: config/example_config.yaml
+    window_size: 500000
+    species: [hg38, panTro5, gorGor5, ponAbe2]
+```
+
+The top level holds `account`, `output_dir` and the list of `analyses`. Every
+analysis is a mapping with the keys below; paths are resolved relative to the
+directory `gwf run` is invoked from.
+
+### Input keys
+
+| Key | Meaning |
+|:---|:---|
+| `name` | label used in target names and as the output subdirectory |
+| `maf` | path to a four-species MAF alignment |
+| `vcf` | path, or list of paths, to phased (g)VCFs — alternative to `maf` |
+| `fasta` | reference the VCFs were called against; optional for all-sites VCFs |
+| `samples` | with `vcf`: four sample IDs in species order A, B, C, outgroup |
+| `config` | path to the iTRAILS configuration file |
+
+`maf` and `vcf` are mutually exclusive and one of them is required. The VCF-only keys
+`block_size`, `regions`, `haplotype` and `mask_uncovered` are described in
+[Input data](input.qmd).
+
+### Analysis keys
+
+| Key | Default | Meaning |
+|:---|:---|:---|
+| `window_size` | none | split into windows of this many reference bases |
+| `fit` | `genome` | fit one model for the whole alignment, or one per window |
+| `species` | `samples` for VCF input | drop MAF blocks missing any of these species |
+| `reference` | first sequence of each block | species used to polarize decode coordinates and to define window bins |
+
+`reference` deserves a note: it is passed to iTRAILS as `--reference`, and in windowed
+mode it also selects the species whose coordinates define the window boundaries. With
+VCF input it must be one of the four samples.
+
+### Resource keys
+
+Every step accepts a dictionary of GWF options — `cores`, `memory`, `walltime`,
+`account`, and any other backend option:
+
+```yaml
+  - name: example
+    maf: data/alignment.maf
+    config: config/example_config.yaml
+    optimize_options: {cores: 64, memory: 128g, walltime: 48:00:00}
+    viterbi_options: {cores: 16, memory: 32g}
+```
+
+The available keys are `vcf2maf_options`, `split_options`, `optimize_options`,
+`viterbi_options`, `posterior_options` and `concat_options`. In a windowed analysis
+the decode options apply to *each* window job, so size them for a single window.
+
+::: { .callout-note }
+
+`cores` on the optimize target is what actually limits parallelism: iTRAILS caps its
+own `n_cpu` setting at the number of CPUs in the Slurm allocation. Setting
+`n_cpu: 64` in the configuration file while asking for 8 cores gives you 8.
+
+:::
+
+## The iTRAILS configuration file
+
+This is the file iTRAILS itself reads. `config/example_config.yaml` is a working
+starting point:
+
+```yaml
+fixed_parameters:
+  mu: 2e-8              # mutation rate; must always be fixed
+
+optimized_parameters:   # each entry: [starting, min, max]
+  N_AB:    [50000, 5000, 500000]
+  N_ABC:   [50000, 5000, 500000]
+  t_1:     [240000, 24000, 2400000]
+  t_2:     [40000, 4000, 400000]
+  t_upper: [745069.3855, 74506.9385, 7450693.8556]
+  r:       [1e-8, 1e-9, 1e-7]
+
+settings:
+  input_maf:            # supplied by the workflow
+  output_prefix:        # supplied by the workflow
+  n_cpu: 16
+  method: "Nelder-Mead"
+  species_list: ["hg38", "panTro5", "gorGor5", "ponAbe2"]
+  n_int_AB: 3
+  n_int_ABC: 3
+  n_iter: 100
+```
+
+::: { .callout-important }
+
+The `input_maf` and `output_prefix` keys must be present but should be left empty:
+the workflow passes both on the command line, which is what lets one configuration
+file serve every window of a windowed analysis.
+
+`species_list` must match the sequence names in the alignment — or, for VCF input,
+the `samples` you listed in `analyses.yml`.
+
+:::
+
+### Model parameters
+
+Times are in generations, sizes are effective population sizes, and rates are per
+site per generation. Each parameter goes in `fixed_parameters` **or**
+`optimized_parameters`, never both.
+
+| Parameter | Meaning |
+|:---|:---|
+| `N_AB` | effective size of the AB ancestor (required) |
+| `N_ABC` | effective size of the ABC ancestor (required) |
+| `t_1` | time from sampling to the A–B split |
+| `t_A`, `t_B`, `t_C` | per-species times, for non-ultrametric trees |
+| `t_2` | duration of the AB ancestor (required) |
+| `t_3` | duration from the ABC split to the outgroup join |
+| `t_upper` | time from the last discretized ABC interval to outgroup coalescence |
+| `t_out` | outgroup sampling to coalescence; if given, must be fixed |
+| `r` | recombination rate (required) |
+| `mu` | mutation rate; **must** be fixed (required) |
+
+At least one of `t_3` and `t_upper` must be given. The time parameters can only be
+combined in certain ways — `{t_1}`, `{t_A,t_B,t_C}`, `{t_1,t_A}`, `{t_1,t_B}`,
+`{t_1,t_C}`, `{t_A,t_B}`, `{t_A,t_C}` or `{t_B,t_C}` — and the unspecified ones are
+derived.
+
+Because `mu` is fixed, every other estimate is scaled relative to it. Changing `mu`
+rescales times and population sizes rather than improving the fit.
+
+### Settings
+
+| Setting | Meaning |
+|:---|:---|
+| `species_list` | the four species, in order A, B, C, outgroup |
+| `n_int_AB`, `n_int_ABC` | number of discretized time intervals in each ancestor |
+| `method` | `Nelder-Mead` or `L-BFGS-B` |
+| `n_iter` | optimizer iterations |
+| `n_cpu` | requested CPUs, capped at the Slurm allocation |
+
+`n_int_AB` and `n_int_ABC` set the resolution of the model and its cost: with three
+intervals each there are 27 hidden states, and the state space grows quickly from
+there.
+
+`n_iter` is the main runtime dial. The published analyses use several thousand
+iterations; the shipped configuration uses 100 so that the example finishes in
+reasonable time, and a handful is enough to check that a pipeline runs at all.
+
+The upstream documentation at
+[itrails.readthedocs.io](https://itrails.readthedocs.io/en/docs-stable/) describes
+the model in more depth, and `claude-itrails-ref.md` in the repository root
+summarizes the command-line interface and file formats.

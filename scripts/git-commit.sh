@@ -111,7 +111,3 @@ case "$choice" in
   n|N) git status ;;
   *) git push && git status ;;
 esac
-
-
-
-

@@ -1,0 +1,146 @@
+# The documentation website
+
+These pages are a [Quarto](https://quarto.org) *book* project rendered from the
+repository and published to the `gh-pages` branch, from where GitHub Pages serves
+them at
+[munch-group.github.io/itrails](https://munch-group.github.io/itrails/). Everything
+that controls the site lives in the repository, so the documentation is edited,
+reviewed and versioned like the code it describes.
+
+## How the site is put together
+
+| File or folder | Role |
+|:---|:---|
+| `_quarto.yml` | project and book configuration: chapters, theme, options |
+| `index.qmd` | the front page |
+| `docs/*.qmd` | these documentation pages |
+| `notebooks/*.ipynb` | result notebooks, included as chapters |
+| `workflow.py` | the workflow, rendered as a chapter |
+| `custom.scss` | theme overrides on top of the default Bootstrap theme |
+| `references.bib` | bibliography |
+| `_book/` | rendered output — generated, not tracked by Git |
+| `_freeze/` | cached results of executed documents |
+
+The book is organized into *parts*, each with a list of chapters:
+
+```yaml
+book:
+  repo-url: "https://github.com/munch-group/itrails"
+  repo-actions: [edit, issue, source]
+  title: "iTRAILS workflow component"
+  chapters:
+    - index.qmd
+    - part: "User guide"
+      chapters:
+      - docs/getting-started.qmd
+      …
+```
+
+`repo-actions` is what puts the *Edit this page* and *Report an issue* links in the
+right margin, pointing back at the source file on GitHub.
+
+::: { .callout-important }
+
+A page is part of the book only if it is listed under `chapters`. A `.qmd` file that
+is not listed is not rendered at all, and it is easy to add a page and wonder why it
+never appears. Add the file to `_quarto.yml` in the same commit.
+
+:::
+
+## Render locally
+
+```{.bash filename="Terminal"}
+pixi run quarto render          # build the whole site into _book/
+pixi run quarto preview         # rebuild and reload in a browser while editing
+```
+
+`quarto preview` is the one to use while writing: it watches the files and refreshes
+the page on save. To work on a single page without rebuilding everything, pass it:
+
+```{.bash filename="Terminal"}
+pixi run quarto preview docs/outputs.qmd
+```
+
+Quarto is part of the default pixi environment, so no separate installation is
+needed.
+
+## Executable content
+
+The project sets `execute: freeze: auto`, which means a document is re-executed only
+when its source changes; otherwise the stored result in `_freeze/` is reused. That
+keeps rendering fast and, more importantly, keeps the site buildable on a machine
+that has neither the cluster nor the data.
+
+Two chapters are not ordinary Markdown:
+
+**`notebooks/example.ipynb`** is executed by the *workflow*, not by Quarto — it is
+the last GWF target, and it runs after the results it reads exist. Quarto renders
+whatever outputs the notebook carries. If the notebook is committed with its outputs
+cleared, the page shows the code without figures, which is the expected state for a
+fresh clone that has not run the pipeline.
+
+**`workflow.py`** is rendered directly as a chapter. It is written in the *percent*
+format, with `# %%` cell markers and a YAML front-matter cell at the top:
+
+```python
+# %% [markdown]
+# ---
+# title: GWF workflow
+# execute:
+#   eval: false
+# ---
+```
+
+`eval: false` is what keeps Quarto from executing the workflow definition while
+building the documentation. Writing the workflow this way means the code and its
+explanation are the same file, and the rendered chapter cannot drift out of sync with
+what actually runs.
+
+## Publishing
+
+`.github/workflows/quarto-publish.yml` renders and publishes on every push to `main`:
+
+```yaml
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+    contents: write
+    pages: write
+```
+
+The job checks out the repository, sets up Python and Quarto, installs Jupyter,
+renders the project to HTML, and hands the result to the `quarto-actions/publish`
+action with `target: gh-pages`. Jupyter is needed because Quarto starts a kernel to
+render `workflow.py`, even though its cells are never evaluated; rendering would
+otherwise fail on a clean checkout, where no `_freeze/` cache exists. The action pushes the rendered site to the `gh-pages` branch
+using the `GITHUB_TOKEN` that Actions provides automatically — there is no secret to
+configure.
+
+For the site to appear, the repository needs **Settings → Pages → Source** set to
+*Deploy from a branch*, with the branch `gh-pages` and folder `/ (root)`. That is a
+one-time setting per repository.
+
+::: { .callout-tip }
+
+Publishing from CI means `_book/` never needs to be committed, and it is in
+`.gitignore` for that reason. If you ever want to publish by hand instead,
+`quarto publish gh-pages` does the same thing from a local checkout.
+
+:::
+
+## Adding a page
+
+1. Write `docs/my-page.qmd`, starting with a level-one heading — the heading becomes
+   the chapter title in the sidebar.
+2. List it under the appropriate part in `_quarto.yml`.
+3. Check it with `pixi run quarto render` before pushing; the GitHub Action runs the
+   same command, so a render that fails locally fails there too.
+
+Useful conventions used throughout these pages: callout blocks
+(`::: { .callout-note }`), fenced code with a filename
+(` ```{.bash filename="Terminal"} `), and Markdown tables for option references.
+Fenced blocks marked `python` are shown but never executed; only blocks marked
+`{python}` would run at render time.

@@ -1,0 +1,144 @@
+# Getting started
+
+## Requirements
+
+Everything is installed by [pixi](https://pixi.sh) from the `pixi.toml` in the
+repository, so the only prerequisites are pixi and Git.
+
+```{.bash filename="Terminal"}
+git clone git@github.com:munch-group/itrails.git
+cd itrails
+```
+
+The repository defines two environments:
+
+`default`
+: The workflow itself, plus Jupyter, Quarto and the plotting libraries used by the
+  notebooks. This is the environment `pixi run` uses unless told otherwise.
+
+`itrails`
+: An isolated environment holding only the iTRAILS package. It is kept separate
+  because iTRAILS pins `numpy`, `scipy` and `numba` to specific versions that would
+  otherwise constrain everything else. Workflow targets invoke it explicitly, so you
+  never have to activate it yourself.
+
+::: { .callout-note }
+
+Because the environments are separate, a workflow target runs its command as
+`pixi run --manifest-path <component>/pixi.toml -e itrails itrails-optimize …`. This
+works the same way on a laptop and on a cluster, unlike GWF executors, which are
+Slurm-only. A parent project that already has iTRAILS installed can override the
+prefix with the `run_prefix` argument described in
+[Use as a submodule](submodule.qmd).
+
+:::
+
+## Run the example
+
+The repository ships with a one-megabase simulated alignment of four great-ape-like
+species (`data/simulated_alignment.maf`), and `analyses.yml` points at it out of the
+box. Nothing needs to be downloaded.
+
+On a cluster, select the Slurm backend once and fill in your account in
+`analyses.yml`:
+
+```{.bash filename="Terminal"}
+pixi run gwf config set backend slurm
+pixi run gwf run
+pixi run gwf status
+```
+
+To run on a laptop instead, start a pool of local workers in one terminal:
+
+```{.bash filename="Terminal"}
+pixi run gwf -b local workers
+```
+
+and submit the workflow from another:
+
+```{.bash filename="Terminal"}
+pixi run gwf -b local run
+pixi run gwf -b local status
+```
+
+::: { .callout-warning }
+
+`gwf status` on the local backend waits for the worker pool. If you see it hang,
+the workers are not running — start them in a separate terminal as shown above.
+
+:::
+
+## What happens
+
+For the example analysis the workflow creates nine targets: one split of the
+alignment into 500 kb windows, one model fit on the full alignment, a Viterbi and a
+posterior decode per window, two concatenation targets, and finally the result
+notebook.
+
+```{.bash filename="Terminal"}
+$ pixi run gwf -b local status
+✓ itrails_split_example completed
+✓ itrails_optimize_example completed
+✓ itrails_viterbi_example_w0000 completed
+…
+✓ itrails_concat_viterbi_example completed
+✓ itrails_concat_posterior_example completed
+✓ example_ipynb completed
+```
+
+Output lands in `steps/itrails/example/`, one subfolder per step, and
+`notebooks/example.ipynb` is executed in place as the last step so it shows the
+fitted parameters and the decoded states. See [Output files](outputs.qmd) for what
+each file contains.
+
+::: { .callout-important }
+
+`itrails-optimize` is by far the heaviest step: it evaluates the HMM likelihood
+repeatedly, and each evaluation costs minutes even on small data. The shipped
+configuration uses `n_iter: 100`, which is a few hours on a well-provisioned node
+and considerably longer on a laptop. Lower `n_iter` in `config/example_config.yaml`
+for a quick smoke test, and give the target many cores for real runs. Decoding, by
+contrast, takes minutes per window.
+
+:::
+
+## Using the real great-ape alignment
+
+To run on the published four-species great-ape alignment (183 MB) instead of the
+simulated one:
+
+```{.bash filename="Terminal"}
+pixi run download-example
+```
+
+and point the analysis at it by setting `maf: data/example_alignment.maf` in
+`analyses.yml`. The species names in `config/example_config.yaml`
+(`hg38`, `panTro5`, `gorGor5`, `ponAbe2`) already match that file.
+
+## Regenerating the simulated data
+
+The shipped alignment is produced by `scripts/simulate_data.py` with
+[msprime](https://tskit.dev/msprime/), under a demography that mirrors human, chimp,
+gorilla and orangutan: splits at 240,000, 350,000 and 700,000 generations and
+ancestral population sizes of 65,000 and 100,000. Fixed random seeds make it
+reproducible:
+
+```{.bash filename="Terminal"}
+pixi run simulate-example
+```
+
+The mutation rate used for the simulation matches the fixed `mu` in the example
+configuration, since all iTRAILS estimates are scaled relative to that value.
+
+## Common commands
+
+| Command | Purpose |
+|:---|:---|
+| `pixi run gwf status` | state of every target |
+| `pixi run gwf status -s failed` | only targets in a given state |
+| `pixi run gwf logs <target>` | stdout of a target |
+| `pixi run gwf logs -e <target>` | stderr of a target |
+| `pixi run gwf clean` | delete output of non-endpoint targets (`--all` for every target) |
+| `pixi run gwf touch` | touch output files so everything counts as up to date |
+| `pixi run gwf info <target>` | the target's spec, inputs, outputs and options |
+| `pixi run quarto render` | build these documentation pages |

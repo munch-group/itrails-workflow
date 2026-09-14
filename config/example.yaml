@@ -1,0 +1,29 @@
+# iTRAILS optimization config for the great-ape example alignment
+# (download with: pixi run download-example)
+#
+# Species topology: ((hg38, panTro5), gorGor5) with ponAbe2 as outgroup.
+# Times in generations, rates per site per generation.
+# See claude-itrails-ref.md for parameter meanings and combination rules.
+
+fixed_parameters:
+  mu: 2e-8              # mutation rate; must always be fixed
+
+optimized_parameters:   # each entry: [starting, min, max]
+  N_AB:    [50000, 5000, 500000]
+  N_ABC:   [50000, 5000, 500000]
+  t_1:     [240000, 24000, 2400000]
+  t_2:     [40000, 4000, 400000]
+  t_upper: [745069.3855, 74506.9385, 7450693.8556]
+  r:       [1e-8, 1e-9, 1e-7]
+
+settings:
+  # input/output are supplied on the command line by the workflow;
+  # the keys must be present but may be left empty
+  input_maf:
+  output_prefix:
+  n_cpu: 10             # capped at the Slurm allocation by itrails itself
+  method: "Nelder-Mead" # or "L-BFGS-B"
+  species_list: ["hg38", "panTro5", "gorGor5", "ponAbe2"]
+  n_int_AB: 3
+  n_int_ABC: 3
+  n_iter: 100           # optimizer iterations, kept low for now; the paper-grade default is 10000

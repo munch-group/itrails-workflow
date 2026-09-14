@@ -1,0 +1,60 @@
+# Analyses run by the standalone workflow (`gwf run` in this directory).
+# When this repository is used as a submodule, the parent workflow passes
+# the same information to itrails_workflow() directly and this file is unused.
+
+# Slurm account for all targets (leave empty when running locally)
+account:
+
+# each analysis writes its files to {output_dir}/{name}/, with one
+# subfolder per step: split/, optimize/, viterbi/, posterior/, concat/
+output_dir: steps/itrails
+
+analyses:
+  - name: example
+    # 1 Mb simulated great-ape-like alignment shipped with the repo
+    # (regenerate: pixi run simulate-example). For the real 183 MB great-ape
+    # alignment, run `pixi run download-example` and use
+    # data/example_alignment.maf instead.
+    maf: data/simulated_alignment.maf
+    config: config/example.yaml
+    # windowed mode: the model is fitted once on the full alignment
+    # (fit: genome, the default), each 500 kb window is decoded as its own
+    # job, and the results are concatenated into concat/example.viterbi.csv
+    # / .posterior.csv. The MAF must exist when the workflow is defined.
+    window_size: 500000
+    # fit: window    # instead fit a separate model per window (heavy)
+    species: [hg38, panTro5, gorGor5, ponAbe2]  # drop blocks missing these
+    # other optional per-analysis extras:
+    # reference: hg38                  # species to polarize decode coordinates
+    #                                  # (and to define windows; default: the
+    #                                  # first species line of each MAF block)
+    # optimize_options: {cores: 64, memory: 128g, walltime: 48:00:00}
+
+  # Instead of a MAF, an analysis can start from phased (g)VCFs called
+  # against a shared reference (e.g. baboon samples mapped to macaque);
+  # an alignment/ step builds the MAF from the first haplotype of each
+  # sample. See the README ("Starting from phased VCFs").
+  # - name: baboons
+  #   vcf: [data/papio.g.vcf.gz]      # one or more phased (g)VCFs
+  #   fasta: data/rheMac10.fa         # reference the VCFs were called against;
+  #                                   # optional for all-sites genome VCFs --
+  #                                   # without it, uncalled positions become N
+  #                                   # and contig lengths come from the
+  #                                   # ##contig header lines
+  #   samples: [s1, s2, s3, REF]      # A, B, C, outgroup; REF = the reference
+  #   config: config/baboons_config.yaml   # species_list must be the samples
+  #   window_size: 2000000            # needs {fasta}.fai (samtools faidx)
+  #                                   # when fasta is given
+  #   # block_size: 1000000           # MAF block length in reference bases
+  #   # regions: [chr1, chr2]         # default: all contigs
+  #   # haplotype: 1                  # 1-based haplotype to extract
+  #   # mask_uncovered: true          # false for plain (non-g)VCFs (needs fasta)
+
+
+  - name: alternative
+    maf: data/simulated_alignment.maf
+    config: config/alternative.yaml
+    window_size: 500000
+    fit: window
+    species: [hg38, panTro5, gorGor5, ponAbe2]  # drop blocks missing these
+    # optimize_options: {cores: 64, memory: 128g, walltime: 48:00:00}

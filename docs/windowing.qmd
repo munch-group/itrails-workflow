@@ -1,0 +1,127 @@
+# Windowed analyses
+
+A genome-scale alignment decoded in one job is a single long-running task that cannot
+use more than one node and has to start over if it fails. Setting `window_size` turns
+the decoding into one job per window, which a cluster can run in parallel:
+
+```yaml
+analyses:
+  - name: primates
+    maf: data/alignment.maf
+    config: config/itrails_config.yaml
+    window_size: 2000000
+    species: [hg38, panTro5, gorGor5, ponAbe2]
+```
+
+## Why this is lossless
+
+iTRAILS treats every MAF block as an independent sequence: the HMM runs along a
+block and starts afresh at the next one, with no transition across the boundary.
+Splitting the alignment *at block boundaries* therefore cannot change any result — a
+window is just a subset of blocks handed to the same model.
+
+What windowing does not do is subdivide a block. A block that straddles a boundary
+belongs to the window its start position falls in, so windows are approximate at
+block granularity. With 1 Mb blocks and 2 Mb windows, a "2 Mb" window holds two or
+three blocks.
+
+## Which coordinates define a window
+
+Blocks are binned by the start coordinate of one species' line in each block: the
+`reference` species if you set one, otherwise the first sequence line of the block,
+which is the MAF convention for the reference genome. Windows are numbered `w0000`,
+`w0001`, … in file order, restarting the numbering at neither chromosome nor
+contig — the label is a running index, and the chromosome is recorded alongside it in
+the manifests.
+
+::: { .callout-note }
+
+## Set `species` to your `species_list`
+
+iTRAILS silently skips alignment blocks that are missing one of the four species. If
+the splitter kept those blocks, the block indices iTRAILS reports would no longer
+line up with the manifest, and the genome coordinates in the concatenated output
+would be wrong. Setting `species` makes the splitter drop exactly the same blocks.
+The concatenation step checks for the mismatch and fails with an explanation rather
+than writing misplaced coordinates.
+
+For VCF input this is automatic: `species` defaults to `samples`.
+
+:::
+
+## Fitting once or per window
+
+`fit: genome` (the default) runs one `itrails-optimize` on the whole alignment and
+decodes every window with that model. Parameters like ancestral population size and
+split time are properties of the species history rather than of a particular
+megabase, so this is the usual setup, and it is also the cheap one — the expensive
+step runs once.
+
+`fit: window` runs a separate optimization for each window, and each window is then
+decoded with its own model. This is what you want if the *variation* of the estimates
+along the genome is the object of study, for instance to look for regions with
+unusual levels of incomplete lineage sorting.
+
+::: { .callout-warning }
+
+`fit: window` multiplies the expensive step by the number of windows: a mammalian
+genome at 2 Mb is on the order of 1,500 optimization jobs. Estimates from a single
+2 Mb window are also noisy, since the parameters are being fit to far less data than
+the model was designed for. Treat the result as a scan, not as 1,500 independent
+answers.
+
+:::
+
+## What the workflow creates
+
+A windowed analysis with two windows produces these targets:
+
+```txt
+itrails_split_{name}              alignment  →  split/w0000.maf, w0001.maf, manifests
+itrails_optimize_{name}           alignment  →  optimize/{name}.best_model.yaml
+itrails_viterbi_{name}_w0000      window     →  viterbi/w0000.viterbi.csv
+itrails_viterbi_{name}_w0001      window     →  viterbi/w0001.viterbi.csv
+itrails_posterior_{name}_w0000    window     →  posterior/w0000.posterior.csv
+itrails_posterior_{name}_w0001    window     →  posterior/w0001.posterior.csv
+itrails_concat_viterbi_{name}     windows    →  concat/{name}.viterbi.csv
+itrails_concat_posterior_{name}   windows    →  concat/{name}.posterior.csv
+```
+
+With `fit: window` the single optimize target is replaced by one per window, named
+`itrails_optimize_{name}_w0000` and writing `optimize/w0000.best_model.yaml`.
+
+The concatenation step stacks the per-window CSVs back into one file per decode kind
+and prefixes every row with the columns needed to place it on the genome. See
+[Output files](outputs.qmd).
+
+## When windows are computed
+
+Window boundaries are worked out **when the workflow is defined**, not when it runs,
+because GWF needs to know the file names of every target up front. How that is done
+depends on the input:
+
+| Input | Source of the window boundaries |
+|:---|:---|
+| `maf` | a scan of the alignment, cached by file size and modification time |
+| `vcf` with `fasta` | contig lengths from the FASTA index `{fasta}.fai` |
+| `vcf` without `fasta` | contig lengths from the `##contig` header lines |
+
+For a MAF this means the alignment has to exist before `gwf run` can build the
+workflow; if an upstream target produces it, run that part first. The scan result is
+cached in `split/.window_index.json` so that repeated `gwf status` calls do not
+re-read a large alignment.
+
+VCF analyses are exempt from that constraint, because the converter tiles every
+contig with blocks of a known size — the windows follow from the contig lengths
+alone. What they need instead is a FASTA index, created once with
+`samtools faidx <reference>.fa`, or `length=` on every `##contig` line.
+
+## Practical notes
+
+- The per-window decode options apply to each window job. Ask for the memory one
+  window needs, not the whole genome.
+- The concatenated posterior file has one row per alignment position and one column
+  per hidden state. For a mammalian genome with 27 states that is very large; the
+  per-window files are often the more practical thing to read.
+- Windows are independent, so a failed window can be rerun on its own with
+  `gwf run itrails_viterbi_{name}_w0042`.

@@ -1,6 +1,0 @@
-# scriptname { #munch_group_library.modulename.scriptname }
-
-```python
-munch_group_library.modulename.scriptname()
-```
-
