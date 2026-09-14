@@ -1,0 +1,548 @@
+[
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "iTRAILS workflow component",
+    "section": "",
+    "text": "Preface\nThese pages document the iTRAILS workflow component: a GWF pipeline that fits the TRAILS coalescent hidden Markov model (Rivas-González et al., 2024) to a four-genome alignment and decodes gene-tree topologies along the genome.\nThe pipeline runs on its own, and it is written so that a larger project can consume it as a Git submodule. The pages are generated from the munch-group/itrails repository and published with GitHub Pages; see The documentation website for how that works.",
+    "crumbs": [
+      "Preface"
+    ]
+  },
+  {
+    "objectID": "index.html#what-the-pipeline-does",
+    "href": "index.html#what-the-pipeline-does",
+    "title": "iTRAILS workflow component",
+    "section": "What the pipeline does",
+    "text": "What the pipeline does\nGiven three ingroup species A, B, C with topology ((A,B),C) and an outgroup, iTRAILS estimates ancestral population sizes and speciation times from the pattern of incomplete lineage sorting along the genome, and then labels each position with a hidden state — a gene-tree topology combined with discretized coalescence times.\nThe component wraps that in a GWF workflow that also prepares the input and splits the work into genomic windows:\n\nflowchart TD\n    VCF[\"phased (g)VCFs&lt;br/&gt;+ optional reference FASTA\"] --&gt; ALIGN[\"&lt;b&gt;alignment/&lt;/b&gt;&lt;br/&gt;itrails_vcf2maf\"]\n    MAF[\"MAF alignment\"] --&gt; OPT\n    ALIGN --&gt; OPT[\"&lt;b&gt;optimize/&lt;/b&gt;&lt;br/&gt;itrails-optimize&lt;br/&gt;→ best_model.yaml\"]\n    ALIGN --&gt; SPLIT\n    MAF --&gt; SPLIT[\"&lt;b&gt;split/&lt;/b&gt;&lt;br/&gt;windows of N bases\"]\n    SPLIT --&gt; VIT[\"&lt;b&gt;viterbi/&lt;/b&gt;&lt;br/&gt;most likely state path\"]\n    SPLIT --&gt; POST[\"&lt;b&gt;posterior/&lt;/b&gt;&lt;br/&gt;state probabilities\"]\n    OPT --&gt; VIT\n    OPT --&gt; POST\n    VIT --&gt; CAT[\"&lt;b&gt;concat/&lt;/b&gt;&lt;br/&gt;genome-wide CSVs\"]\n    POST --&gt; CAT\n\n\n\n\nflowchart TD\n    VCF[\"phased (g)VCFs&lt;br/&gt;+ optional reference FASTA\"] --&gt; ALIGN[\"&lt;b&gt;alignment/&lt;/b&gt;&lt;br/&gt;itrails_vcf2maf\"]\n    MAF[\"MAF alignment\"] --&gt; OPT\n    ALIGN --&gt; OPT[\"&lt;b&gt;optimize/&lt;/b&gt;&lt;br/&gt;itrails-optimize&lt;br/&gt;→ best_model.yaml\"]\n    ALIGN --&gt; SPLIT\n    MAF --&gt; SPLIT[\"&lt;b&gt;split/&lt;/b&gt;&lt;br/&gt;windows of N bases\"]\n    SPLIT --&gt; VIT[\"&lt;b&gt;viterbi/&lt;/b&gt;&lt;br/&gt;most likely state path\"]\n    SPLIT --&gt; POST[\"&lt;b&gt;posterior/&lt;/b&gt;&lt;br/&gt;state probabilities\"]\n    OPT --&gt; VIT\n    OPT --&gt; POST\n    VIT --&gt; CAT[\"&lt;b&gt;concat/&lt;/b&gt;&lt;br/&gt;genome-wide CSVs\"]\n    POST --&gt; CAT\n\n\n\n\n\n\nEach step writes to its own subfolder of the analysis directory, so outputs stay easy to tell apart. Windowing and the VCF front end are both optional: the smallest possible analysis is a MAF file plus a configuration file, which gives one model fit and one decode of each kind.",
+    "crumbs": [
+      "Preface"
+    ]
+  },
+  {
+    "objectID": "index.html#where-to-start",
+    "href": "index.html#where-to-start",
+    "title": "iTRAILS workflow component",
+    "section": "Where to start",
+    "text": "Where to start\n\n\n\nIf you want to …\nRead\n\n\n\n\nrun the shipped example and see output\nGetting started\n\n\nuse your own alignment or variant calls\nInput data\n\n\nknow what every setting does\nConfiguration\n\n\nanalyze a whole genome in parallel\nWindowed analyses\n\n\nfind and read the result files\nOutput files\n\n\nplug the pipeline into a larger project\nUse as a submodule",
+    "crumbs": [
+      "Preface"
+    ]
+  },
+  {
+    "objectID": "index.html#repository-layout",
+    "href": "index.html#repository-layout",
+    "title": "iTRAILS workflow component",
+    "section": "Repository layout",
+    "text": "Repository layout\nanalyses.yml            what to analyze (standalone runs)\nconfig/                 iTRAILS model configuration files\nworkflow.py             standalone GWF entry point\nitrails_workflow.py     the workflow factory a parent project imports\nscripts/                vcf_to_maf.py, split_maf.py, concat_windows.py, simulate_data.py\ndata/                   input alignments (a small simulated one is included)\nnotebooks/              result notebooks, executed by the workflow\nsteps/                  workflow output (not tracked by Git)\ndocs/                   these pages\n\n\n\n\n\n\nNote\n\n\n\nTwo reference documents in the repository root — claude-itrails-ref.md and claude-gwf-ref.md — collect the iTRAILS command-line interface, file formats and model parameters, and the GWF API. They are written as working references for maintaining the pipeline and go deeper than these pages on both tools.",
+    "crumbs": [
+      "Preface"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html",
+    "href": "docs/getting-started.html",
+    "title": "Getting started",
+    "section": "",
+    "text": "Requirements\nEverything is installed by pixi from the pixi.toml in the repository, so the only prerequisites are pixi and Git.\nThe repository defines two environments:",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#requirements",
+    "href": "docs/getting-started.html#requirements",
+    "title": "Getting started",
+    "section": "",
+    "text": "Terminal\n\ngit clone git@github.com:munch-group/itrails.git\ncd itrails\n\n\n\ndefault\n\nThe workflow itself, plus Jupyter, Quarto and the plotting libraries used by the notebooks. This is the environment pixi run uses unless told otherwise.\n\nitrails\n\nAn isolated environment holding only the iTRAILS package. It is kept separate because iTRAILS pins numpy, scipy and numba to specific versions that would otherwise constrain everything else. Workflow targets invoke it explicitly, so you never have to activate it yourself.\n\n\n\n\n\n\n\n\nNote\n\n\n\nBecause the environments are separate, a workflow target runs its command as pixi run --manifest-path &lt;component&gt;/pixi.toml -e itrails itrails-optimize …. This works the same way on a laptop and on a cluster, unlike GWF executors, which are Slurm-only. A parent project that already has iTRAILS installed can override the prefix with the run_prefix argument described in Use as a submodule.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#run-the-example",
+    "href": "docs/getting-started.html#run-the-example",
+    "title": "Getting started",
+    "section": "Run the example",
+    "text": "Run the example\nThe repository ships with a one-megabase simulated alignment of four great-ape-like species (data/simulated_alignment.maf), and analyses.yml points at it out of the box. Nothing needs to be downloaded.\nOn a cluster, select the Slurm backend once and fill in your account in analyses.yml:\n\n\nTerminal\n\npixi run gwf config set backend slurm\npixi run gwf run\npixi run gwf status\n\nTo run on a laptop instead, start a pool of local workers in one terminal:\n\n\nTerminal\n\npixi run gwf -b local workers\n\nand submit the workflow from another:\n\n\nTerminal\n\npixi run gwf -b local run\npixi run gwf -b local status\n\n\n\n\n\n\n\nWarning\n\n\n\ngwf status on the local backend waits for the worker pool. If you see it hang, the workers are not running — start them in a separate terminal as shown above.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#what-happens",
+    "href": "docs/getting-started.html#what-happens",
+    "title": "Getting started",
+    "section": "What happens",
+    "text": "What happens\nFor the example analysis the workflow creates nine targets: one split of the alignment into 500 kb windows, one model fit on the full alignment, a Viterbi and a posterior decode per window, two concatenation targets, and finally the result notebook.\n\n\nTerminal\n\n$ pixi run gwf -b local status\n✓ itrails_split_example completed\n✓ itrails_optimize_example completed\n✓ itrails_viterbi_example_w0000 completed\n…\n✓ itrails_concat_viterbi_example completed\n✓ itrails_concat_posterior_example completed\n✓ example_ipynb completed\n\nOutput lands in steps/itrails/example/, one subfolder per step, and notebooks/example.ipynb is executed in place as the last step so it shows the fitted parameters and the decoded states. See Output files for what each file contains.\n\n\n\n\n\n\nImportant\n\n\n\nitrails-optimize is by far the heaviest step: it evaluates the HMM likelihood repeatedly, and each evaluation costs minutes even on small data. The shipped configuration uses n_iter: 100, which is a few hours on a well-provisioned node and considerably longer on a laptop. Lower n_iter in config/example_config.yaml for a quick smoke test, and give the target many cores for real runs. Decoding, by contrast, takes minutes per window.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#using-the-real-great-ape-alignment",
+    "href": "docs/getting-started.html#using-the-real-great-ape-alignment",
+    "title": "Getting started",
+    "section": "Using the real great-ape alignment",
+    "text": "Using the real great-ape alignment\nTo run on the published four-species great-ape alignment (183 MB) instead of the simulated one:\n\n\nTerminal\n\npixi run download-example\n\nand point the analysis at it by setting maf: data/example_alignment.maf in analyses.yml. The species names in config/example_config.yaml (hg38, panTro5, gorGor5, ponAbe2) already match that file.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#regenerating-the-simulated-data",
+    "href": "docs/getting-started.html#regenerating-the-simulated-data",
+    "title": "Getting started",
+    "section": "Regenerating the simulated data",
+    "text": "Regenerating the simulated data\nThe shipped alignment is produced by scripts/simulate_data.py with msprime, under a demography that mirrors human, chimp, gorilla and orangutan: splits at 240,000, 350,000 and 700,000 generations and ancestral population sizes of 65,000 and 100,000. Fixed random seeds make it reproducible:\n\n\nTerminal\n\npixi run simulate-example\n\nThe mutation rate used for the simulation matches the fixed mu in the example configuration, since all iTRAILS estimates are scaled relative to that value.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/getting-started.html#common-commands",
+    "href": "docs/getting-started.html#common-commands",
+    "title": "Getting started",
+    "section": "Common commands",
+    "text": "Common commands\n\n\n\n\n\n\n\nCommand\nPurpose\n\n\n\n\npixi run gwf status\nstate of every target\n\n\npixi run gwf status -s failed\nonly targets in a given state\n\n\npixi run gwf logs &lt;target&gt;\nstdout of a target\n\n\npixi run gwf logs -e &lt;target&gt;\nstderr of a target\n\n\npixi run gwf clean\ndelete output of non-endpoint targets (--all for every target)\n\n\npixi run gwf touch\ntouch output files so everything counts as up to date\n\n\npixi run gwf info &lt;target&gt;\nthe target’s spec, inputs, outputs and options\n\n\npixi run quarto render\nbuild these documentation pages",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>1</span>  <span class='chapter-title'>Getting started</span>"
+    ]
+  },
+  {
+    "objectID": "docs/input.html",
+    "href": "docs/input.html",
+    "title": "Input data",
+    "section": "",
+    "text": "MAF alignments\nAn analysis starts either from a ready-made alignment (maf) or from phased variant calls (vcf). Exactly one of the two must be given; everything downstream is identical.\niTRAILS reads a MAF file holding the four aligned genomes in the order A, B, C, outgroup.\nTwo properties matter for the pipeline:\nSpecies names. iTRAILS takes the species as the part of the sequence name before the first dot, and matches it against the species_list in the configuration file. A block is used only if all four species are present in it.\nBlocks are independent. Each alignment block is treated as a separate sequence by the HMM, with no transition across block boundaries. This is what makes windowing lossless: splitting a MAF at block boundaries cannot change the result. It also means the block size you choose is a modelling decision — blocks should be long compared to the scale of linkage, and the shipped data uses 50 kb blocks.\nGaps (-) are read as N, and N columns contribute no information rather than being treated as a mismatch.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Input data</span>"
+    ]
+  },
+  {
+    "objectID": "docs/input.html#maf-alignments",
+    "href": "docs/input.html#maf-alignments",
+    "title": "Input data",
+    "section": "",
+    "text": "##maf version=1 scoring=none\n\na score=0\ns hg38.chr1     0 50000 + 1000000 ACGT…\ns panTro5.chr1  0 50000 + 1000000 ACGT…\ns gorGor5.chr1  0 50000 + 1000000 ACGT…\ns ponAbe2.chr1  0 50000 + 1000000 ACGT…",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Input data</span>"
+    ]
+  },
+  {
+    "objectID": "docs/input.html#phased-vcfs",
+    "href": "docs/input.html#phased-vcfs",
+    "title": "Input data",
+    "section": "Phased VCFs",
+    "text": "Phased VCFs\nFor closely related species that were all mapped and variant-called against the same reference genome — baboon species against the macaque genome, for instance — the shared coordinate system already aligns the genomes. In that situation the workflow can build the alignment itself: give vcf and samples instead of maf, and an alignment/ step reconstructs one haplotype per sample.\nanalyses:\n  - name: baboons\n    vcf: [data/papio.g.vcf.gz, data/theropithecus.g.vcf.gz]\n    fasta: data/rheMac10.fa\n    samples: [pAnubis1, pHamadryas1, pCynocephalus1, REF]\n    config: config/baboons_config.yaml\n    window_size: 2000000\nsamples lists exactly four sample IDs in species order A, B, C, outgroup. The first haplotype of each is used, which for phased data means the allele before the | separator; haplotype: 2 selects the other one. Sample IDs double as the species names in the generated alignment, so they are what belongs in the species_list of the configuration file, and they must not contain a dot.\n\n\n\n\n\n\nTipThe REF sample\n\n\n\nThe reserved name REF stands for the reference sequence itself rather than a sample in the VCF. It exists for exactly the baboon case: the genome everything was mapped to is the outgroup, and it has no genotype column of its own.\n\n\n\nWith or without a reference FASTA\nThe fasta key is optional, and which of the two modes fits depends on what your files contain.\nWith fasta — the reference provides the base at every position and variant alleles are written on top of it. This is the mode for ordinary variant-only VCFs and for banded gVCFs, whose non-variant blocks record only a span and a genotype rather than the sequence itself.\nWithout fasta — sequences are reconstructed from the records alone. This is meant for all-sites genome VCFs, where every callable position has a record carrying its REF base. Positions without a record become N, and the REF pseudo-sample is assembled from the REF fields of the records. Contig names, lengths and order are then taken from the ##contig header lines, which must carry length=.\n\n\n\n\n\n\nWarning\n\n\n\nBanded gVCF blocks (END= records) only store the base at the anchor position — the rest of the block is not in the file. Converting such a file without a fasta therefore yields N for the block interiors, which is almost never what you want. The converter counts those positions and warns. Supply fasta for banded gVCFs.\n\n\n\n\nHow calls become sequence\n\n\n\n\n\n\n\nRecord for the sample\nWritten to the haplotype\n\n\n\n\nSNP or equal-length substitution\nthe chosen allele\n\n\ninsertion, deletion, or other length change\nN over the reference span\n\n\nsymbolic allele (&lt;NON_REF&gt;, &lt;*&gt;, *)\nN over the reference span\n\n\nmissing genotype (.)\nN over the reference span\n\n\nnon-variant block (END=) with allele 0\nreference bases (with fasta)\n\n\nno record at all\nN, unless mask_uncovered: false\n\n\n\nAnything whose length differs from REF cannot be represented in reference coordinates without shifting every downstream position, so it is masked rather than approximated. mask_uncovered: false switches to the plain-VCF reading where absence of a record means “identical to the reference”; it requires fasta, since without the reference there is nothing to fill those positions with. FILTER is ignored entirely — filter the VCF beforehand if you need that.\nUnphased heterozygous genotypes (0/1) are not an error: the first listed allele is used, and the converter reports how many it saw so you can judge whether the input was as phased as you thought.\n\n\nMultiple files\nSamples may be spread over several VCFs, one per sample or one per region, and each file contributes whichever requested samples appear in its header. Files must be coordinate-sorted with contigs in the same order as the FASTA (or, without a FASTA, as the first file’s header). Where two files carry the same sample, the later file wins.\nUse regions: [chr1, chr2] to restrict an analysis to selected contigs; the default is every contig in the FASTA or in the VCF headers.\n\n\nConverting outside the workflow\nThe conversion is a plain script and can be run by hand, which is useful for checking a small region before committing to a full run:\n\n\nTerminal\n\npixi run python scripts/vcf_to_maf.py data/papio.g.vcf.gz \\\n    --fasta data/rheMac10.fa \\\n    --samples pAnubis1 pHamadryas1 pCynocephalus1 REF \\\n    --output test.maf --regions chr20 --block-size 1000000",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>2</span>  <span class='chapter-title'>Input data</span>"
+    ]
+  },
+  {
+    "objectID": "docs/configuration.html",
+    "href": "docs/configuration.html",
+    "title": "Configuration",
+    "section": "",
+    "text": "analyses.yml\nTwo files control a standalone run: analyses.yml says what to analyze, and an iTRAILS configuration file says how to fit the model. When the repository is used as a submodule the parent workflow passes the same information as arguments and analyses.yml is unused — see Use as a submodule.\nThe top level holds account, output_dir and the list of analyses. Every analysis is a mapping with the keys below; paths are resolved relative to the directory gwf run is invoked from.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>3</span>  <span class='chapter-title'>Configuration</span>"
+    ]
+  },
+  {
+    "objectID": "docs/configuration.html#analyses.yml",
+    "href": "docs/configuration.html#analyses.yml",
+    "title": "Configuration",
+    "section": "",
+    "text": "# Slurm account for all targets (leave empty when running locally)\naccount:\n\n# each analysis writes to {output_dir}/{name}/, one subfolder per step\noutput_dir: steps/itrails\n\nanalyses:\n  - name: example\n    maf: data/simulated_alignment.maf\n    config: config/example_config.yaml\n    window_size: 500000\n    species: [hg38, panTro5, gorGor5, ponAbe2]\n\n\nInput keys\n\n\n\n\n\n\n\nKey\nMeaning\n\n\n\n\nname\nlabel used in target names and as the output subdirectory\n\n\nmaf\npath to a four-species MAF alignment\n\n\nvcf\npath, or list of paths, to phased (g)VCFs — alternative to maf\n\n\nfasta\nreference the VCFs were called against; optional for all-sites VCFs\n\n\nsamples\nwith vcf: four sample IDs in species order A, B, C, outgroup\n\n\nconfig\npath to the iTRAILS configuration file\n\n\n\nmaf and vcf are mutually exclusive and one of them is required. The VCF-only keys block_size, regions, haplotype and mask_uncovered are described in Input data.\n\n\nAnalysis keys\n\n\n\n\n\n\n\n\nKey\nDefault\nMeaning\n\n\n\n\nwindow_size\nnone\nsplit into windows of this many reference bases\n\n\nfit\ngenome\nfit one model for the whole alignment, or one per window\n\n\nspecies\nsamples for VCF input\ndrop MAF blocks missing any of these species\n\n\nreference\nfirst sequence of each block\nspecies used to polarize decode coordinates and to define window bins\n\n\n\nreference deserves a note: it is passed to iTRAILS as --reference, and in windowed mode it also selects the species whose coordinates define the window boundaries. With VCF input it must be one of the four samples.\n\n\nResource keys\nEvery step accepts a dictionary of GWF options — cores, memory, walltime, account, and any other backend option:\n  - name: example\n    maf: data/alignment.maf\n    config: config/example_config.yaml\n    optimize_options: {cores: 64, memory: 128g, walltime: 48:00:00}\n    viterbi_options: {cores: 16, memory: 32g}\nThe available keys are vcf2maf_options, split_options, optimize_options, viterbi_options, posterior_options and concat_options. In a windowed analysis the decode options apply to each window job, so size them for a single window.\n\n\n\n\n\n\nNote\n\n\n\ncores on the optimize target is what actually limits parallelism: iTRAILS caps its own n_cpu setting at the number of CPUs in the Slurm allocation. Setting n_cpu: 64 in the configuration file while asking for 8 cores gives you 8.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>3</span>  <span class='chapter-title'>Configuration</span>"
+    ]
+  },
+  {
+    "objectID": "docs/configuration.html#the-itrails-configuration-file",
+    "href": "docs/configuration.html#the-itrails-configuration-file",
+    "title": "Configuration",
+    "section": "The iTRAILS configuration file",
+    "text": "The iTRAILS configuration file\nThis is the file iTRAILS itself reads. config/example_config.yaml is a working starting point:\nfixed_parameters:\n  mu: 2e-8              # mutation rate; must always be fixed\n\noptimized_parameters:   # each entry: [starting, min, max]\n  N_AB:    [50000, 5000, 500000]\n  N_ABC:   [50000, 5000, 500000]\n  t_1:     [240000, 24000, 2400000]\n  t_2:     [40000, 4000, 400000]\n  t_upper: [745069.3855, 74506.9385, 7450693.8556]\n  r:       [1e-8, 1e-9, 1e-7]\n\nsettings:\n  input_maf:            # supplied by the workflow\n  output_prefix:        # supplied by the workflow\n  n_cpu: 16\n  method: \"Nelder-Mead\"\n  species_list: [\"hg38\", \"panTro5\", \"gorGor5\", \"ponAbe2\"]\n  n_int_AB: 3\n  n_int_ABC: 3\n  n_iter: 100\n\n\n\n\n\n\nImportant\n\n\n\nThe input_maf and output_prefix keys must be present but should be left empty: the workflow passes both on the command line, which is what lets one configuration file serve every window of a windowed analysis.\nspecies_list must match the sequence names in the alignment — or, for VCF input, the samples you listed in analyses.yml.\n\n\n\nModel parameters\nTimes are in generations, sizes are effective population sizes, and rates are per site per generation. Each parameter goes in fixed_parameters or optimized_parameters, never both.\n\n\n\n\n\n\n\nParameter\nMeaning\n\n\n\n\nN_AB\neffective size of the AB ancestor (required)\n\n\nN_ABC\neffective size of the ABC ancestor (required)\n\n\nt_1\ntime from sampling to the A–B split\n\n\nt_A, t_B, t_C\nper-species times, for non-ultrametric trees\n\n\nt_2\nduration of the AB ancestor (required)\n\n\nt_3\nduration from the ABC split to the outgroup join\n\n\nt_upper\ntime from the last discretized ABC interval to outgroup coalescence\n\n\nt_out\noutgroup sampling to coalescence; if given, must be fixed\n\n\nr\nrecombination rate (required)\n\n\nmu\nmutation rate; must be fixed (required)\n\n\n\nAt least one of t_3 and t_upper must be given. The time parameters can only be combined in certain ways — {t_1}, {t_A,t_B,t_C}, {t_1,t_A}, {t_1,t_B}, {t_1,t_C}, {t_A,t_B}, {t_A,t_C} or {t_B,t_C} — and the unspecified ones are derived.\nBecause mu is fixed, every other estimate is scaled relative to it. Changing mu rescales times and population sizes rather than improving the fit.\n\n\nSettings\n\n\n\n\n\n\n\nSetting\nMeaning\n\n\n\n\nspecies_list\nthe four species, in order A, B, C, outgroup\n\n\nn_int_AB, n_int_ABC\nnumber of discretized time intervals in each ancestor\n\n\nmethod\nNelder-Mead or L-BFGS-B\n\n\nn_iter\noptimizer iterations\n\n\nn_cpu\nrequested CPUs, capped at the Slurm allocation\n\n\n\nn_int_AB and n_int_ABC set the resolution of the model and its cost: with three intervals each there are 27 hidden states, and the state space grows quickly from there.\nn_iter is the main runtime dial. The published analyses use several thousand iterations; the shipped configuration uses 100 so that the example finishes in reasonable time, and a handful is enough to check that a pipeline runs at all.\nThe upstream documentation at itrails.readthedocs.io describes the model in more depth, and claude-itrails-ref.md in the repository root summarizes the command-line interface and file formats.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>3</span>  <span class='chapter-title'>Configuration</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html",
+    "href": "docs/windowing.html",
+    "title": "Windowed analyses",
+    "section": "",
+    "text": "Why this is lossless\nA genome-scale alignment decoded in one job is a single long-running task that cannot use more than one node and has to start over if it fails. Setting window_size turns the decoding into one job per window, which a cluster can run in parallel:\niTRAILS treats every MAF block as an independent sequence: the HMM runs along a block and starts afresh at the next one, with no transition across the boundary. Splitting the alignment at block boundaries therefore cannot change any result — a window is just a subset of blocks handed to the same model.\nWhat windowing does not do is subdivide a block. A block that straddles a boundary belongs to the window its start position falls in, so windows are approximate at block granularity. With 1 Mb blocks and 2 Mb windows, a “2 Mb” window holds two or three blocks.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html#which-coordinates-define-a-window",
+    "href": "docs/windowing.html#which-coordinates-define-a-window",
+    "title": "Windowed analyses",
+    "section": "Which coordinates define a window",
+    "text": "Which coordinates define a window\nBlocks are binned by the start coordinate of one species’ line in each block: the reference species if you set one, otherwise the first sequence line of the block, which is the MAF convention for the reference genome. Windows are numbered w0000, w0001, … in file order, restarting the numbering at neither chromosome nor contig — the label is a running index, and the chromosome is recorded alongside it in the manifests.\n\n\n\n\n\n\nNoteSet species to your species_list\n\n\n\niTRAILS silently skips alignment blocks that are missing one of the four species. If the splitter kept those blocks, the block indices iTRAILS reports would no longer line up with the manifest, and the genome coordinates in the concatenated output would be wrong. Setting species makes the splitter drop exactly the same blocks. The concatenation step checks for the mismatch and fails with an explanation rather than writing misplaced coordinates.\nFor VCF input this is automatic: species defaults to samples.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html#fitting-once-or-per-window",
+    "href": "docs/windowing.html#fitting-once-or-per-window",
+    "title": "Windowed analyses",
+    "section": "Fitting once or per window",
+    "text": "Fitting once or per window\nfit: genome (the default) runs one itrails-optimize on the whole alignment and decodes every window with that model. Parameters like ancestral population size and split time are properties of the species history rather than of a particular megabase, so this is the usual setup, and it is also the cheap one — the expensive step runs once.\nfit: window runs a separate optimization for each window, and each window is then decoded with its own model. This is what you want if the variation of the estimates along the genome is the object of study, for instance to look for regions with unusual levels of incomplete lineage sorting.\n\n\n\n\n\n\nWarning\n\n\n\nfit: window multiplies the expensive step by the number of windows: a mammalian genome at 2 Mb is on the order of 1,500 optimization jobs. Estimates from a single 2 Mb window are also noisy, since the parameters are being fit to far less data than the model was designed for. Treat the result as a scan, not as 1,500 independent answers.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html#what-the-workflow-creates",
+    "href": "docs/windowing.html#what-the-workflow-creates",
+    "title": "Windowed analyses",
+    "section": "What the workflow creates",
+    "text": "What the workflow creates\nA windowed analysis with two windows produces these targets:\nitrails_split_{name}              alignment  →  split/w0000.maf, w0001.maf, manifests\nitrails_optimize_{name}           alignment  →  optimize/{name}.best_model.yaml\nitrails_viterbi_{name}_w0000      window     →  viterbi/w0000.viterbi.csv\nitrails_viterbi_{name}_w0001      window     →  viterbi/w0001.viterbi.csv\nitrails_posterior_{name}_w0000    window     →  posterior/w0000.posterior.csv\nitrails_posterior_{name}_w0001    window     →  posterior/w0001.posterior.csv\nitrails_concat_viterbi_{name}     windows    →  concat/{name}.viterbi.csv\nitrails_concat_posterior_{name}   windows    →  concat/{name}.posterior.csv\nWith fit: window the single optimize target is replaced by one per window, named itrails_optimize_{name}_w0000 and writing optimize/w0000.best_model.yaml.\nThe concatenation step stacks the per-window CSVs back into one file per decode kind and prefixes every row with the columns needed to place it on the genome. See Output files.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html#when-windows-are-computed",
+    "href": "docs/windowing.html#when-windows-are-computed",
+    "title": "Windowed analyses",
+    "section": "When windows are computed",
+    "text": "When windows are computed\nWindow boundaries are worked out when the workflow is defined, not when it runs, because GWF needs to know the file names of every target up front. How that is done depends on the input:\n\n\n\n\n\n\n\nInput\nSource of the window boundaries\n\n\n\n\nmaf\na scan of the alignment, cached by file size and modification time\n\n\nvcf with fasta\ncontig lengths from the FASTA index {fasta}.fai\n\n\nvcf without fasta\ncontig lengths from the ##contig header lines\n\n\n\nFor a MAF this means the alignment has to exist before gwf run can build the workflow; if an upstream target produces it, run that part first. The scan result is cached in split/.window_index.json so that repeated gwf status calls do not re-read a large alignment.\nVCF analyses are exempt from that constraint, because the converter tiles every contig with blocks of a known size — the windows follow from the contig lengths alone. What they need instead is a FASTA index, created once with samtools faidx &lt;reference&gt;.fa, or length= on every ##contig line.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/windowing.html#practical-notes",
+    "href": "docs/windowing.html#practical-notes",
+    "title": "Windowed analyses",
+    "section": "Practical notes",
+    "text": "Practical notes\n\nThe per-window decode options apply to each window job. Ask for the memory one window needs, not the whole genome.\nThe concatenated posterior file has one row per alignment position and one column per hidden state. For a mammalian genome with 27 states that is very large; the per-window files are often the more practical thing to read.\nWindows are independent, so a failed window can be rerun on its own with gwf run itrails_viterbi_{name}_w0042.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>4</span>  <span class='chapter-title'>Windowed analyses</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html",
+    "href": "docs/outputs.html",
+    "title": "Output files",
+    "section": "",
+    "text": "optimize/\nEvery analysis writes to {output_dir}/{name}/ with one subfolder per step, so it is always clear which step produced a file:\nWithout windowing there is no split/ or concat/, and the decode files are named after the analysis (viterbi/example.viterbi.csv) rather than after a window.\n{name}.best_model.yaml is the fitted model, and the input to both decode steps:\n{name}.optimization_history.csv records the parameter values, log-likelihood and elapsed time of every iteration, which is the file to plot when judging whether an optimization had converged. {name}.starting_params.yaml records the starting values and bounds the run began from.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#optimize",
+    "href": "docs/outputs.html#optimize",
+    "title": "Output files",
+    "section": "",
+    "text": "fixed_parameters:\n  mu: 2.0e-08\noptimized_parameters:\n  N_AB: 51249.99\n  N_ABC: 51249.99\n  r: 1.0249e-08\n  t_1: 246000.0\n  t_2: 41000.0\n  t_upper: 670562.44\nresults:\n  iteration: 8\n  log_likelihood: -813757.29\nsettings:\n  …\n\n\n\n\n\n\nWarning\n\n\n\nThis file is written at iteration zero, with a log-likelihood of -inf, and updated whenever the optimizer improves on the best fit so far. Its existence therefore does not mean the optimization finished — check the target status, and read results: iteration to see how far it got.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#viterbi",
+    "href": "docs/outputs.html#viterbi",
+    "title": "Output files",
+    "section": "viterbi/",
+    "text": "viterbi/\n{window}.viterbi.csv segments the alignment into runs of constant most-likely state:\n\n\n\n\n\n\n\nColumn\nMeaning\n\n\n\n\nBlock_idx\nindex of the alignment block within this window’s file\n\n\nposition_start, position_end\nsegment bounds within the block, 0-based\n\n\nmost_likely_state\nhidden state index",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#posterior",
+    "href": "docs/outputs.html#posterior",
+    "title": "Output files",
+    "section": "posterior/",
+    "text": "posterior/\n{window}.posterior.csv gives one row per alignment position:\n\n\n\n\n\n\n\nColumn\nMeaning\n\n\n\n\nalignment_block_idx\nindex of the alignment block within this window’s file\n\n\nposition_idx\nposition within the block, 0-based\n\n\nprob_state_0 … prob_state_N\nposterior probability of each hidden state\n\n\n\nWith n_int_AB: 3 and n_int_ABC: 3 there are 27 state columns. The file has a row for every base, so it is one to two orders of magnitude larger than the alignment.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#the-hidden-state-legend",
+    "href": "docs/outputs.html#the-hidden-state-legend",
+    "title": "Output files",
+    "section": "The hidden-state legend",
+    "text": "The hidden-state legend\n{window}.hidden_states.csv translates state indices into biology:\n\n\n\n\n\n\n\nColumn\nMeaning\n\n\n\n\nstate_idx\nthe index used in the decode files\n\n\ntopology\ngene-tree topology, e.g. ({sp1,sp2},sp3)\n\n\ninterval_1st_coalescent\ntime interval of the first coalescence, in generations\n\n\ninterval_2nd_coalescent\ntime interval of the second coalescence\n\n\nshorthand_name\ncompact label such as (0, 0, 1)\n\n\n\nThe topology distinguishes the species-tree arrangement from the two incomplete lineage sorting alternatives, and the intervals say when in the ancestral populations the two coalescences fell.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#split-and-the-manifests",
+    "href": "docs/outputs.html#split-and-the-manifests",
+    "title": "Output files",
+    "section": "split/ and the manifests",
+    "text": "split/ and the manifests\nsplit/ holds one MAF per window plus two manifests that record how the alignment was divided. windows.tsv:\n\n\n\nColumn\nMeaning\n\n\n\n\nwindow\nwindow label, w0000, w0001, …\n\n\nchrom\nbinning-reference sequence name, e.g. hg38.chr1\n\n\nstart, end\nnominal window bounds in reference coordinates\n\n\nn_blocks\nnumber of alignment blocks in the window\n\n\n\nblocks.tsv maps every block back to the original alignment:\n\n\n\n\n\n\n\nColumn\nMeaning\n\n\n\n\nwindow\nwindow the block was assigned to\n\n\nlocal_idx\nindex of the block within the window — the Block_idx iTRAILS reports\n\n\nsrc_block\nindex of the block in the original, unsplit alignment\n\n\nchrom, start, length\nposition of the block in reference coordinates",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#concat",
+    "href": "docs/outputs.html#concat",
+    "title": "Output files",
+    "section": "concat/",
+    "text": "concat/\nThe concatenated files stack the per-window decodes back together in window order and prefix each row with four columns that restore genome context:\n\n\n\nColumn\nMeaning\n\n\n\n\nwindow\nwhich window the row came from\n\n\nchrom\nbinning-reference sequence name\n\n\nblock_start\nreference start coordinate of the block\n\n\nsrc_block\nindex of the block in the original alignment\n\n\n\nThe original columns follow unchanged, so a genome coordinate is block_start plus the block-local position:\nwindow,chrom,block_start,src_block,Block_idx,position_start,position_end,most_likely_state\nw0000,hg38.chr1,0,0,0,0,9843,8.0\nw0000,hg38.chr1,0,0,0,9844,16109,17.0\nw0001,hg38.chr1,950000,19,9,0,41049,2.0",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/outputs.html#reading-the-results",
+    "href": "docs/outputs.html#reading-the-results",
+    "title": "Output files",
+    "section": "Reading the results",
+    "text": "Reading the results\nimport pandas as pd\n\nanalysis = 'steps/itrails/example'\n\nvit = pd.read_csv(f'{analysis}/concat/example.viterbi.csv')\nstates = pd.read_csv(f'{analysis}/viterbi/w0000.hidden_states.csv')\n\n# genome coordinates and a readable state label\nvit['genome_start'] = vit['block_start'] + vit['position_start']\nvit['genome_end'] = vit['block_start'] + vit['position_end']\nvit['state'] = vit['most_likely_state'].map(\n    states.set_index('state_idx')['shorthand_name'])\n\n# how much sequence is assigned to each state\nvit['length'] = vit['genome_end'] - vit['genome_start'] + 1\nvit.groupby('state')['length'].sum().sort_values(ascending=False)\nnotebooks/example.ipynb, which the workflow executes as its last step, does exactly this and plots the results; it is included in these pages under Notebooks.",
+    "crumbs": [
+      "User guide",
+      "<span class='chapter-number'>5</span>  <span class='chapter-title'>Output files</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html",
+    "href": "docs/submodule.html",
+    "title": "Use as a submodule",
+    "section": "",
+    "text": "Add the component\nThe repository is written so that it works two ways: on its own, driven by analyses.yml, and as a component of a larger GWF project that adds this repository as a Git submodule and grafts the iTRAILS targets onto its own workflow. The second is the reason the pipeline is factored the way it is.\nSubmodules are useful when an analysis component is shared across projects, or when several pipelines need to be combined into one dependency graph. Each component keeps its own repository, environment and workflow, and the parent decides how they connect; the GWF documentation describes the underlying patterns for dynamically generated workflows and large workflows.\nFrom the root of the parent project:\nThen check out a branch inside the submodule. A fresh submodule is in detached HEAD state, and work committed there is easy to lose:",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#add-the-component",
+    "href": "docs/submodule.html#add-the-component",
+    "title": "Use as a submodule",
+    "section": "",
+    "text": "Terminal\n\ngit submodule add git@github.com:munch-group/itrails.git itrails\ngit submodule init itrails\ngit submodule update itrails\ngit add .gitmodules itrails\ngit commit -m 'Added itrails as submodule'\n\n\n\n\nTerminal\n\ncd itrails\ngit checkout main\n\n\n\n\n\n\n\nImportant\n\n\n\nInstall a current Git in your environment — the one on the cluster is ancient — and set these once, since the commands below assume them:\n\n\nTerminal\n\ngit config --global diff.submodule log\ngit config status.submodulesummary 1\ngit config push.recurseSubmodules check",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#call-the-factory",
+    "href": "docs/submodule.html#call-the-factory",
+    "title": "Use as a submodule",
+    "section": "Call the factory",
+    "text": "Call the factory\nThe parent imports itrails_workflow and hands it its own Workflow object:\nimport os, sys\nfrom gwf import Workflow\n\ngwf = Workflow(defaults={'account': 'my-project'})\n\nsys.path.insert(0, os.path.join(os.path.dirname(__file__), 'itrails'))\nfrom itrails_workflow import itrails_workflow\n\ngwf, itrails_targets = itrails_workflow(\n    gwf=gwf,\n    analyses=[\n        dict(name='primates',\n             maf='data/alignment.maf',\n             config='config/itrails_config.yaml',\n             window_size=2_000_000),\n    ],\n    output_dir='steps/itrails',\n)\n\n\n\n\n\n\nNoteWhy the odd import\n\n\n\nThe factory lives in itrails_workflow.py rather than workflow.py, and is imported by inserting the submodule directory on sys.path. Both choices avoid name collisions: the parent has its own workflow.py, and the installed Python package is also called itrails, so importing this repository as a package would shadow the tool it wraps.\n\n\nPaths in the analysis dictionaries are resolved relative to where gwf run is invoked — the parent project root — not relative to the submodule.",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#arguments",
+    "href": "docs/submodule.html#arguments",
+    "title": "Use as a submodule",
+    "section": "Arguments",
+    "text": "Arguments\n\n\n\n\n\n\n\nArgument\nMeaning\n\n\n\n\ngwf\nthe parent’s Workflow; a new one is created if omitted\n\n\nanalyses\nlist of analysis dictionaries, the same keys as in analyses.yml\n\n\noutput_dir\nroot for all output, default steps/itrails\n\n\naccount\nSlurm account added to every target\n\n\nwindow_size, fit\ndefaults for all analyses, overridable per analysis\n\n\nrun_prefix\ncommand prefix that puts the iTRAILS executables on PATH\n\n\n*_options\nper-step resource dictionaries applied to every analysis\n\n\n\nrun_prefix defaults to running each command inside the submodule’s own pixi environment, resolved from the module’s own location so that it works no matter which directory the parent is run from. A parent that already provides iTRAILS can pass its own activation prefix, or run_prefix='' to use whatever is on PATH.",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#wiring-up-downstream-targets",
+    "href": "docs/submodule.html#wiring-up-downstream-targets",
+    "title": "Use as a submodule",
+    "section": "Wiring up downstream targets",
+    "text": "Wiring up downstream targets\nThe factory returns (gwf, targets), where targets maps step names to the created targets, so the parent can depend on iTRAILS output by name instead of by hard-coded path:\nviterbi_csv = itrails_targets['concat_viterbi'][0].outputs['csv']\nbest_model = itrails_targets['optimize'][0].outputs['best_model']\n\ngwf.target('summarize',\n           inputs=[viterbi_csv],\n           outputs=['steps/summary/ils_fractions.tsv']) &lt;&lt; f\"\"\"\npython scripts/summarize_ils.py {viterbi_csv} steps/summary/ils_fractions.tsv\n\"\"\"\nThe keys are optimize, viterbi and posterior; vcf2maf when the analysis starts from VCFs; and split, concat_viterbi and concat_posterior for windowed analyses. Each target’s outputs dictionary is documented in Output files — best_model, viterbi, posterior, hidden_states, maf, windows, manifest, blocks and csv.\nFeeding a parent-generated alignment into the component works the same way, with one caveat: a windowed analysis reading a maf needs that file to exist when the workflow is defined, so run the target that produces it first. VCF analyses have no such constraint — see Windowed analyses.",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#several-components-in-one-workflow",
+    "href": "docs/submodule.html#several-components-in-one-workflow",
+    "title": "Use as a submodule",
+    "section": "Several components in one workflow",
+    "text": "Several components in one workflow\nComponents combine by passing the same gwf object to each factory, which is how this repository is meant to sit alongside sibling components such as rfmix:\nimport os, sys\nfrom gwf import Workflow\n\ndef target_output_files(targets, key):\n    return [out for target in targets[key] for out in target.outputs]\n\ngwf = Workflow(defaults={'account': 'my-project'})\n\nfor component in ['itrails', 'rfmix']:\n    sys.path.insert(0, os.path.join(os.path.dirname(__file__), component))\n\nfrom itrails_workflow import itrails_workflow\nfrom workflow import rfmix_workflow\n\ngwf, itrails_targets = itrails_workflow(gwf=gwf, analyses=[...],\n                                        output_dir='steps/itrails')\ngwf, rfmix_targets = rfmix_workflow(gwf, analyzes=[...],\n                                    output_dir='steps/rfmix')\nSince every target ends up in one graph, GWF works out the dependencies across components from the files they declare, and gwf status shows the whole pipeline.",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/submodule.html#keeping-the-submodule-current",
+    "href": "docs/submodule.html#keeping-the-submodule-current",
+    "title": "Use as a submodule",
+    "section": "Keeping the submodule current",
+    "text": "Keeping the submodule current\nPulling in the parent updates the recorded state of the submodule but does not update the submodule contents; that is a separate step:\n\n\nTerminal\n\ngit pull                                  # parent, including the recorded commit\ngit submodule update --remote --merge     # fetch and merge submodule changes\n\n--checkout (the default) puts the submodule on a detached HEAD at the recorded commit, --merge merges into the current branch, and --rebase rebases onto it. Changes made inside the submodule are published from within it:\n\n\nTerminal\n\ncd itrails\ngit add -u && git commit -m 'Adjusted resources'\ngit push\n\nThen commit the new submodule state in the parent, which is what records the version of the component the project used.",
+    "crumbs": [
+      "Integration",
+      "<span class='chapter-number'>6</span>  <span class='chapter-title'>Use as a submodule</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html",
+    "href": "docs/website.html",
+    "title": "The documentation website",
+    "section": "",
+    "text": "How the site is put together\nThese pages are a Quarto book project rendered from the repository and published to the gh-pages branch, from where GitHub Pages serves them at munch-group.github.io/itrails. Everything that controls the site lives in the repository, so the documentation is edited, reviewed and versioned like the code it describes.\nThe book is organized into parts, each with a list of chapters:\nrepo-actions is what puts the Edit this page and Report an issue links in the right margin, pointing back at the source file on GitHub.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html#how-the-site-is-put-together",
+    "href": "docs/website.html#how-the-site-is-put-together",
+    "title": "The documentation website",
+    "section": "",
+    "text": "File or folder\nRole\n\n\n\n\n_quarto.yml\nproject and book configuration: chapters, theme, options\n\n\nindex.qmd\nthe front page\n\n\ndocs/*.qmd\nthese documentation pages\n\n\nnotebooks/*.ipynb\nresult notebooks, included as chapters\n\n\nworkflow.py\nthe workflow, rendered as a chapter\n\n\ncustom.scss\ntheme overrides on top of the default Bootstrap theme\n\n\nreferences.bib\nbibliography\n\n\n_book/\nrendered output — generated, not tracked by Git\n\n\n_freeze/\ncached results of executed documents\n\n\n\n\nbook:\n  repo-url: \"https://github.com/munch-group/itrails\"\n  repo-actions: [edit, issue, source]\n  title: \"iTRAILS workflow component\"\n  chapters:\n    - index.qmd\n    - part: \"User guide\"\n      chapters:\n      - docs/getting-started.qmd\n      …\n\n\n\n\n\n\n\nImportant\n\n\n\nA page is part of the book only if it is listed under chapters. A .qmd file that is not listed is not rendered at all, and it is easy to add a page and wonder why it never appears. Add the file to _quarto.yml in the same commit.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html#render-locally",
+    "href": "docs/website.html#render-locally",
+    "title": "The documentation website",
+    "section": "Render locally",
+    "text": "Render locally\n\n\nTerminal\n\npixi run quarto render          # build the whole site into _book/\npixi run quarto preview         # rebuild and reload in a browser while editing\n\nquarto preview is the one to use while writing: it watches the files and refreshes the page on save. To work on a single page without rebuilding everything, pass it:\n\n\nTerminal\n\npixi run quarto preview docs/outputs.qmd\n\nQuarto is part of the default pixi environment, so no separate installation is needed.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html#executable-content",
+    "href": "docs/website.html#executable-content",
+    "title": "The documentation website",
+    "section": "Executable content",
+    "text": "Executable content\nThe project sets execute: freeze: auto, which means a document is re-executed only when its source changes; otherwise the stored result in _freeze/ is reused. That keeps rendering fast and, more importantly, keeps the site buildable on a machine that has neither the cluster nor the data.\nTwo chapters are not ordinary Markdown:\nnotebooks/example.ipynb is executed by the workflow, not by Quarto — it is the last GWF target, and it runs after the results it reads exist. Quarto renders whatever outputs the notebook carries. If the notebook is committed with its outputs cleared, the page shows the code without figures, which is the expected state for a fresh clone that has not run the pipeline.\nworkflow.py is rendered directly as a chapter. It is written in the percent format, with # %% cell markers and a YAML front-matter cell at the top:\n# %% [markdown]\n# ---\n# title: GWF workflow\n# execute:\n#   eval: false\n# ---\neval: false is what keeps Quarto from executing the workflow definition while building the documentation. Writing the workflow this way means the code and its explanation are the same file, and the rendered chapter cannot drift out of sync with what actually runs.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html#publishing",
+    "href": "docs/website.html#publishing",
+    "title": "The documentation website",
+    "section": "Publishing",
+    "text": "Publishing\n.github/workflows/quarto-publish.yml renders and publishes on every push to main:\non:\n  push:\n    branches:\n      - main\n\npermissions:\n    contents: write\n    pages: write\nThe job checks out the repository, sets up Python and Quarto, installs Jupyter, renders the project to HTML, and hands the result to the quarto-actions/publish action with target: gh-pages. Jupyter is needed because Quarto starts a kernel to render workflow.py, even though its cells are never evaluated; rendering would otherwise fail on a clean checkout, where no _freeze/ cache exists. The action pushes the rendered site to the gh-pages branch using the GITHUB_TOKEN that Actions provides automatically — there is no secret to configure.\nFor the site to appear, the repository needs Settings → Pages → Source set to Deploy from a branch, with the branch gh-pages and folder / (root). That is a one-time setting per repository.\n\n\n\n\n\n\nTip\n\n\n\nPublishing from CI means _book/ never needs to be committed, and it is in .gitignore for that reason. If you ever want to publish by hand instead, quarto publish gh-pages does the same thing from a local checkout.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "docs/website.html#adding-a-page",
+    "href": "docs/website.html#adding-a-page",
+    "title": "The documentation website",
+    "section": "Adding a page",
+    "text": "Adding a page\n\nWrite docs/my-page.qmd, starting with a level-one heading — the heading becomes the chapter title in the sidebar.\nList it under the appropriate part in _quarto.yml.\nCheck it with pixi run quarto render before pushing; the GitHub Action runs the same command, so a render that fails locally fails there too.\n\nUseful conventions used throughout these pages: callout blocks (::: { .callout-note }), fenced code with a filename (```{.bash filename=\"Terminal\"}), and Markdown tables for option references. Fenced blocks marked python are shown but never executed; only blocks marked {python} would run at render time.",
+    "crumbs": [
+      "Repository",
+      "<span class='chapter-number'>7</span>  <span class='chapter-title'>The documentation website</span>"
+    ]
+  },
+  {
+    "objectID": "notebooks/example.html",
+    "href": "notebooks/example.html",
+    "title": "iTRAILS results",
+    "section": "",
+    "text": "Fitted model parameters\nLoads the outputs produced by the workflow (gwf run in the repository root) and gives a first look at each analysis: the fitted model parameters, the Viterbi segmentation of the alignment into gene-tree states, and the posterior state probabilities along the alignment.\nThe notebook is executed by the workflow itself once all upstream targets are done, so it simply discovers whatever analyses exist under steps/itrails/ (each analysis has one subfolder per step: split/, optimize/, viterbi/, posterior/, concat/).\nThe best parameter set found by itrails-optimize for each analysis (times in generations, r per site per generation):\nfor analysis in analyses:\n    name = analysis.name\n    best_model = analysis / 'optimize' / f'{name}.best_model.yaml'\n    if not best_model.exists():\n        # fit: window mode has one best_model per window instead\n        window_models = sorted((analysis / 'optimize').glob('*.best_model.yaml'))\n        display(Markdown(f\"### {name}\\n{len(window_models)} per-window model fits \"\n                         f\"in `{analysis / 'optimize'}`\"))\n        continue\n    with open(best_model) as f:\n        best = yaml.safe_load(f)\n    display(Markdown(f\"### {name}\\n\"\n                     f\"log likelihood: **{best['results']['log_likelihood']}** \"\n                     f\"(iteration {best['results']['iteration']})\"))\n    display(pd.Series(best['optimized_parameters'], name='estimate', dtype=float).to_frame())\n\nexample\nlog likelihood: -1694588.894203797 (iteration 152)\n\n\n\n\n\n\n\n\n\nestimate\n\n\n\n\nN_AB\n5.300800e+04\n\n\nN_ABC\n1.044956e+05\n\n\nr\n2.634070e-09\n\n\nt_1\n2.859235e+05\n\n\nt_2\n2.923413e+04\n\n\nt_upper\n2.681633e+05",
+    "crumbs": [
+      "Notebooks",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>iTRAILS results</span>"
+    ]
+  },
+  {
+    "objectID": "notebooks/example.html#viterbi-decoding",
+    "href": "notebooks/example.html#viterbi-decoding",
+    "title": "iTRAILS results",
+    "section": "Viterbi decoding",
+    "text": "Viterbi decoding\nHow much of the alignment is assigned to each hidden state (a gene-tree topology combined with coalescence-time intervals), and the state sequence along the genome (windowed analyses, using concat/{name}.viterbi.csv) or along the largest alignment block (unwindowed analyses):\n\nfor analysis in analyses:\n    name = analysis.name\n    windowed = (analysis / 'concat' / f'{name}.viterbi.csv').exists()\n    if windowed:\n        # concatenated per-window decode; block_start + block-local position\n        # places each segment on the binning-reference genome\n        vit = pd.read_csv(analysis / 'concat' / f'{name}.viterbi.csv')\n        vit['genome_start'] = vit['block_start'] + vit['position_start']\n        vit['genome_end'] = vit['block_start'] + vit['position_end']\n        # under fit: genome every window has the same state legend\n        states_file = sorted((analysis / 'viterbi').glob('*.hidden_states.csv'))[0]\n    else:\n        vit = pd.read_csv(analysis / 'viterbi' / f'{name}.viterbi.csv')\n        states_file = analysis / 'viterbi' / f'{name}.hidden_states.csv'\n    states = pd.read_csv(states_file)\n    labels = states.set_index('state_idx')['shorthand_name']\n\n    vit['length'] = vit['position_end'] - vit['position_start'] + 1\n    bp_per_state = (vit.groupby('most_likely_state')['length'].sum()\n                       .rename(index=labels).sort_values())\n\n    fig, axes = plt.subplots(1, 2, figsize=(12, 4))\n\n    bp_per_state.plot.barh(ax=axes[0], color='C0')\n    axes[0].set_xlabel('bases assigned')\n    axes[0].set_ylabel('hidden state')\n\n    if windowed:\n        for seg in vit.itertuples():\n            axes[1].hlines(seg.most_likely_state, seg.genome_start, seg.genome_end,\n                           lw=3, color='C0')\n        axes[1].set_xlabel(f\"position on {vit['chrom'].iloc[0]}\")\n    else:\n        largest_block = vit.groupby('Block_idx')['length'].sum().idxmax()\n        block = vit[vit['Block_idx'] == largest_block]\n        for seg in block.itertuples():\n            axes[1].hlines(seg.most_likely_state, seg.position_start, seg.position_end,\n                           lw=3, color='C0')\n        axes[1].set_xlabel(f'position in block {largest_block}')\n    axes[1].set_ylabel('state index')\n\n    fig.suptitle(f'{name}: Viterbi decoding')\n    fig.tight_layout()\n    plt.show()",
+    "crumbs": [
+      "Notebooks",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>iTRAILS results</span>"
+    ]
+  },
+  {
+    "objectID": "notebooks/example.html#posterior-decoding",
+    "href": "notebooks/example.html#posterior-decoding",
+    "title": "iTRAILS results",
+    "section": "Posterior decoding",
+    "text": "Posterior decoding\nPosterior probability of every hidden state along the genome (windowed analyses, using concat/{name}.posterior.csv) or along the largest alignment block (unwindowed analyses). Positions are subsampled for plotting when the sequence is long:\n\nfor analysis in analyses:\n    name = analysis.name\n    windowed = (analysis / 'concat' / f'{name}.posterior.csv').exists()\n    if windowed:\n        post = pd.read_csv(analysis / 'concat' / f'{name}.posterior.csv')\n        prob_cols = [c for c in post.columns if c.startswith('prob_state_')]\n        post['genome_pos'] = post['block_start'] + post['position_idx']\n        post = post.sort_values('genome_pos')\n        probs = post[prob_cols].to_numpy().T\n        xlabel = f\"position on {post['chrom'].iloc[0]}\"\n    else:\n        post = pd.read_csv(analysis / 'posterior' / f'{name}.posterior.csv')\n        prob_cols = [c for c in post.columns if c.startswith('prob_state_')]\n        block_col = post.columns[0]\n        largest_block = post[block_col].value_counts().idxmax()\n        probs = post[post[block_col] == largest_block][prob_cols].to_numpy().T\n        xlabel = f'position in block {largest_block}'\n\n    step = max(1, probs.shape[1] // 2000)\n    plt.figure(figsize=(12, 4))\n    plt.imshow(probs[:, ::step], aspect='auto', origin='lower',\n               cmap='viridis', vmin=0, vmax=1, interpolation='nearest')\n    plt.colorbar(label='posterior probability')\n    plt.xlabel(xlabel + (f' (every {step} bp)' if step &gt; 1 else ''))\n    plt.ylabel('state index')\n    plt.title(f'{name}: posterior decoding')\n    plt.show()",
+    "crumbs": [
+      "Notebooks",
+      "<span class='chapter-number'>8</span>  <span class='chapter-title'>iTRAILS results</span>"
+    ]
+  },
+  {
+    "objectID": "workflow.html",
+    "href": "workflow.html",
+    "title": "GWF workflow",
+    "section": "",
+    "text": "Imports\nr”“”\niTRAILS workflow: fits the TRAILS coalescent HMM (Rivas-González et al., 2024) to a four-genome MAF alignment and decodes gene-tree topologies along the genome. The heavy lifting lives in itrails_workflow.py, which a parent project can import when this repository is used as a git submodule (see the README). This file is the standalone entry point: gwf run in this directory builds the workflow from the analyses listed in analyses.yml.\nFor each analysis, three targets are chained:\nAll files for an analysis are written to {output_dir}/{name}/, with one subfolder per step so outputs are easy to separate: split/, optimize/, viterbi/, posterior/, concat/.\nWith a window_size key in the analysis, the alignment is instead split into fixed-size windows at MAF-block boundaries (itrails_split_{name}, writing to split/), each window is decoded as its own job, and the per-window CSVs are concatenated into genome-wide concat/{name}.viterbi.csv / concat/{name}.posterior.csv (itrails_concat_*_{name}). The model is fitted once for the whole alignment (fit: genome, default) or per window (fit: window).\nAn analysis can also start from phased (g)VCFs instead of a MAF (vcf + samples keys, optionally fasta): an alignment/ step (itrails_vcf2maf_{name}) reconstructs one haplotype per sample in the shared reference coordinates — for closely related species all mapped to the same outgroup genome. Without a fasta, all-sites genome VCFs are converted from the records alone (uncalled positions become N). See the README and the itrails_workflow docstring.\nSee claude-itrails-ref.md for the iTRAILS CLI, config format, and output file details, and claude-gwf-ref.md for gwf itself. ““”\nimport glob\nimport os\nfrom pathlib import Path\n\nfrom gwf import AnonymousTarget, Workflow\n\nfrom global_params import load_params\nfrom itrails_workflow import itrails_workflow",
+    "crumbs": [
+      "Workflows",
+      "<span class='chapter-number'>9</span>  <span class='chapter-title'>GWF workflow</span>"
+    ]
+  },
+  {
+    "objectID": "workflow.html#notebook-template",
+    "href": "workflow.html#notebook-template",
+    "title": "GWF workflow",
+    "section": "Notebook template",
+    "text": "Notebook template\nExecutes a notebook in place once the workflow outputs it depends on exist.\n\n# task template function\ndef run_notebook(path, dependencies, memory='8g', walltime='00:10:00', cores=1):\n    \"\"\"\n    Executes a notebook inplace and saves the output.\n    \"\"\"\n    # path of output sentinel file\n    sentinel = str(Path(path).parent / f'.{Path(path).name}.sentinel')\n\n    # input specification\n    inputs = [path] + dependencies\n    # output specification mapping a label to each file\n    outputs = {'sentinel': sentinel}\n    # resource specification\n    options = {'memory': memory, 'walltime': walltime, 'cores': cores}\n\n    # commands to run in task (bash script)\n    spec = f\"\"\"\n    jupyter nbconvert --to notebook --execute --inplace {path} && touch {sentinel}\n    \"\"\"\n    # return target\n    return AnonymousTarget(inputs=inputs, outputs=outputs, options=options, spec=spec)",
+    "crumbs": [
+      "Workflows",
+      "<span class='chapter-number'>9</span>  <span class='chapter-title'>GWF workflow</span>"
+    ]
+  },
+  {
+    "objectID": "workflow.html#workflow",
+    "href": "workflow.html#workflow",
+    "title": "GWF workflow",
+    "section": "Workflow",
+    "text": "Workflow\nThe workflow is instantiated unconditionally so that gwf commands work even before analyses.yml is filled in; targets are only added when it exists.\n\ngwf = Workflow(working_dir=os.getcwd())\n\nparams_file = Path(__file__).parent / 'analyses.yml'\nif params_file.exists():\n    params = load_params(params_file)\n\n    gwf, targets = itrails_workflow(\n        gwf=gwf,\n        analyses=params.analyses,\n        output_dir=params.output_dir,\n        account=params.account,\n    )\n\n    # make notebooks depend on all output files from the workflow\n    notebook_dependencies = []\n    for target in gwf.targets.values():\n        outputs = target.outputs\n        if type(outputs) is dict:\n            outputs = outputs.values()\n        for output in outputs:\n            # dict values may themselves be lists (e.g. the window MAFs\n            # produced by the split target in windowed mode)\n            if isinstance(output, list):\n                notebook_dependencies.extend(output)\n            else:\n                notebook_dependencies.append(output)\n\n    # run notebooks in sorted order nb01_, nb02_, ...\n    for path in sorted(glob.glob('notebooks/*.ipynb')):\n        target = gwf.target_from_template(\n            os.path.basename(path).replace('.', '_'),\n            run_notebook(path, notebook_dependencies))\n        # make each notebook depend on all previous notebooks\n        notebook_dependencies.append(target.outputs['sentinel'])",
+    "crumbs": [
+      "Workflows",
+      "<span class='chapter-number'>9</span>  <span class='chapter-title'>GWF workflow</span>"
+    ]
+  }
+]
